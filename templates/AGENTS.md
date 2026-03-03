@@ -333,6 +333,40 @@ Pipeline speed is a feature. Optimise for the shortest possible feedback loop �
 
 ---
 
+## Compliance — GDPR [CONFIGURE]
+
+<!-- PROJECT: Include if this project handles personal data of EEA/UK individuals.
+     See `.github/instructions/gdpr.instructions.md` for full standards. -->
+
+- Every processing activity has a documented lawful basis before code is written.
+- Collect only the personal data strictly necessary for the documented purpose.
+- Data subject rights (access, rectification, erasure, portability, restriction, objection) supported within 30 days without bespoke engineering.
+- Automated retention enforcement — every personal data category has a defined retention period and TTL or scheduled purge.
+- No real personal data in non-production environments. Synthetic or anonymised data only.
+- No personal data in logs, traces, or metrics unless explicitly justified and documented.
+- Cross-border transfers require a lawful mechanism (adequacy decision, SCCs, or BCRs).
+- Privacy by design and by default — most protective settings are the default; data minimisation is the default.
+
+---
+
+## Compliance — PCI DSS [CONFIGURE]
+
+<!-- PROJECT: Include only if this product stores, processes, or transmits
+     payment card data. If all card handling is delegated to a PCI-compliant
+     third party, verify scope with your QSA before including.
+     See `.github/instructions/pci-dss.instructions.md` for full standards. -->
+
+- Minimise the Cardholder Data Environment (CDE). Tokenise or delegate card handling to reduce scope.
+- Never store CVV, PIN, or full track data after authorisation. Never log the full PAN.
+- PAN rendered unreadable everywhere it is stored (AES-256, HMAC-SHA-256+, truncation, or tokenisation).
+- TLS 1.2+ mandatory for all cardholder data transmission. No protocol fallback.
+- Code review by a qualified individual other than the author for all CDE changes.
+- Audit logging for all access to cardholder data and CDE systems. 12-month retention, 3 months immediately available.
+- Quarterly vulnerability scanning (internal + ASV external). Annual penetration testing.
+- MFA for all administrative and remote CDE access. Unique IDs — no shared accounts.
+
+---
+
 ## Project-Specific Rules [CONFIGURE]
 
 <!-- PROJECT: Rules unique to this project that don't fit the categories above. -->

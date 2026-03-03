@@ -557,6 +557,59 @@ Include this section if the project has infrastructure.
 
 ---
 
+## Compliance — GDPR
+
+Include this section if the project handles personal data of EEA/UK individuals.
+See `.github/instructions/gdpr.instructions.md` for full standards.
+
+- Every processing activity has a documented lawful basis before code is written.
+- Collect only the personal data strictly necessary for the documented purpose. No `SELECT *` on personal data tables. API responses return only needed fields.
+- Data subject rights (access, rectification, erasure, portability, restriction, objection) must be fulfillable within 30 days without bespoke engineering effort per request.
+- Automated retention enforcement — every personal data category has a defined retention period and TTL or scheduled purge. "Keep forever" is never acceptable.
+- No real personal data in non-production environments. Use synthetic data generators or anonymised extracts.
+- No personal data in logs, traces, or metrics unless explicitly justified and documented. Default to exclusion.
+- Cross-border transfers require a lawful mechanism (adequacy decision, Standard Contractual Clauses, or Binding Corporate Rules). Document all transfers.
+- Privacy by design and by default — most protective settings are the default. Users opt in to less privacy, not out.
+- Consent must be freely given, specific, informed, and unambiguous. No pre-ticked boxes. Withdrawal must be as easy as giving consent.
+- Encryption: AES-256 at rest, TLS 1.2+ in transit. Keys managed via dedicated KMS, never stored alongside encrypted data.
+
+<!-- PROJECT: Configure:
+- Data inventory location
+- DSAR tooling and endpoints
+- Retention schedule
+- DPO contact
+-->
+
+---
+
+## Compliance — PCI DSS
+
+Include this section only if the product stores, processes, or transmits payment card data.
+If all card handling is delegated to a PCI-compliant third party, verify scope with your QSA.
+See `.github/instructions/pci-dss.instructions.md` for full standards.
+
+- Minimise the Cardholder Data Environment (CDE). Tokenise or delegate card handling to reduce scope.
+- **Never store** CVV, PIN, or full track data after authorisation — not at any log level, not in any format, not "temporarily."
+- **Never log** the full PAN. Masked PAN only (first 6/last 4) in all logs, at all levels, in all systems.
+- PAN rendered unreadable everywhere stored: AES-256 encryption, HMAC-SHA-256+ hashing, truncation, or tokenisation. Keys managed in dedicated KMS, never in the same system as encrypted data.
+- TLS 1.2+ mandatory for all cardholder data transmission. No fallback to weaker protocols. Certificate validation always enabled.
+- Code review by a qualified individual other than the author for all CDE changes before production deployment.
+- Audit logging for all access to cardholder data and CDE systems. Never log sensitive authentication data. 12-month retention, 3 months immediately available.
+- Quarterly internal and external (ASV) vulnerability scanning. Annual penetration testing. Remediate critical/high within 30 days.
+- MFA for all administrative and remote CDE access. Unique IDs — no shared or group accounts.
+- Test environments use test card numbers only. No real PANs in non-production.
+- Payment page scripts inventoried, authorised, and integrity-checked (SRI hashes). CSP headers restricting script sources.
+- Network segmentation: CDE isolated with controlled ingress/egress. Application architecture should align service boundaries with CDE boundary.
+
+<!-- PROJECT: Configure:
+- CDE boundary documentation location
+- Payment processor and tokenisation provider
+- QSA contact
+- ASV provider
+-->
+
+---
+
 ## Project-Specific Rules [CONFIGURE]
 
 <!-- PROJECT: Rules unique to this project that don't fit the categories above. -->

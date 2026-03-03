@@ -85,6 +85,8 @@ Read and apply all coding standards defined in `AGENTS.md` in this repository ro
 - Operational excellence
 - API design standards
 - Infrastructure as Code
+- GDPR compliance (data minimisation, lawful basis, data subject rights, retention, pseudonymisation, privacy by design)
+- PCI DSS compliance (CDE scope minimisation, cardholder data protection, audit logging, vulnerability scanning, MFA)
 - Autonomous improvement during review (fix coverage gaps and pipeline issues proactively, delegate to subagents)
 
 Do not weaken or override these standards.
