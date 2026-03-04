@@ -92,7 +92,7 @@ skills/                                 Reusable procedures (invoke as part of t
 
 - **British English** throughout (optimisation, behaviour, colour)
 - **Kebab-case** file names
-- **`## N · Section Title`** heading style (middle dot separator)
+- In `templates/standards/*`, use **`## N · Section Title`** heading style (middle dot separator)
 - **`[CONFIGURE]`** in headings marks project-specific sections
 - **`<!-- PROJECT: ... -->`** HTML comments mark inline customisation points
 - SOLID principles always use **full names** (never SRP, OCP, etc.)
