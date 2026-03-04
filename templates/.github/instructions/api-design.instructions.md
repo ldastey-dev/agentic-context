@@ -24,6 +24,7 @@ Resource paths use **plural nouns**, never verbs.
   already express the action.
 
 ### URL Structure
+
 - Path segments are **kebab-case**: `/v1/line-items`, not `/v1/lineItems` or
   `/v1/line_items`.
 - Resource identifiers are path parameters: `/v1/orders/{orderId}`, not
@@ -100,6 +101,7 @@ primitive.
 - Single-resource responses omit `pagination` and wrap the resource in `data`.
 
 ### Field Naming
+
 - All field names are **camelCase**: `customerId`, `createdAt`, `lineItems`.
 - Use descriptive, context-qualified names: `customerId` not `id`, `orderTotal`
   not `total`, `createdAt` not `date`.
@@ -145,6 +147,7 @@ that carries the same information). Every error response includes these fields:
 ```
 
 ### Error Rules
+
 - **`type`** — a stable URI identifying the error category. Machine-readable.
   Clients switch on this, not on status codes alone.
 - **`code`** on field errors — a machine-readable constant (`INVALID_FORMAT`,
@@ -182,6 +185,7 @@ required set — every API must handle all of these consistently.
 | `500` | Internal Server Error | Unhandled server failure. Log the full error server-side |
 
 ### Status Code Rules
+
 - **Distinguish 400 from 422.** `400` means the request is malformed (bad JSON,
   wrong content type). `422` means the JSON is valid but the values fail business
   validation.
@@ -212,12 +216,14 @@ All collection endpoints must paginate. No exceptions.
 - The response `links` object includes `next` and `prev` (null when at bounds).
 
 ### Filtering
+
 - Filter by resource fields using query parameters: `?status=active&region=eu`.
 - Complex filters use a documented syntax. Document operator support explicitly
   (e.g., `?createdAfter=2024-01-01&createdBefore=2024-12-31`).
 - Unknown filter parameters must be rejected with `400`, not silently ignored.
 
 ### Sorting
+
 - Use `sortBy` and `sortOrder` query parameters: `?sortBy=createdAt&sortOrder=desc`.
 - Default sort order must be documented.
 - Only allow sorting on indexed / performant fields. Reject unsupported sort fields
@@ -249,6 +255,7 @@ Use **path-based major versioning**: `/v1/`, `/v2/`.
 | Add a new enum value | Possibly | Depends on consumer contracts |
 
 ### Deprecation Policy
+
 - Support a minimum of **two concurrent versions**: current (N) and previous (N-1).
 - Deprecated versions must include `Deprecation` and `Sunset` headers in every
   response:
@@ -280,6 +287,7 @@ Every response includes a `links` object with discoverable navigation and action
 ```
 
 ### Link Rules
+
 - **`self`** — present on every resource response. Points to the canonical URL.
 - **`next`** / **`prev`** — present on paginated collections. Null at boundaries.
 - **Action links** — only include actions the caller is authorised to perform.
@@ -295,6 +303,7 @@ Every response includes a `links` object with discoverable navigation and action
 ## Idempotency & Reliability
 
 ### Idempotency Guarantees
+
 - **GET** — always idempotent and safe. No side effects.
 - **PUT** — truly idempotent. Sending the same PUT request twice produces the same
   resource state. The second call does not create a duplicate or fail.
@@ -312,12 +321,14 @@ Non-idempotent operations (POST) must support an `Idempotency-Key` header.
 - Reject requests with a previously-used key but a different request body with `422`.
 
 ### Optimistic Concurrency
+
 - Use `ETag` headers on resource responses.
 - Update operations (PUT, PATCH) require `If-Match` with the current ETag.
 - Return `412 Precondition Failed` if the ETag does not match.
 - This prevents lost-update problems in concurrent environments.
 
 ### Retry Safety
+
 - Document which endpoints are safe to retry.
 - Idempotent methods (GET, PUT, DELETE) are always safe to retry.
 - POST with an `Idempotency-Key` is safe to retry.
@@ -341,6 +352,7 @@ X-RateLimit-Reset: 1705312800
 - **`X-RateLimit-Reset`** — Unix epoch timestamp when the window resets.
 
 ### Rate Limit Rules
+
 - When the limit is exceeded, return `429 Too Many Requests` with a `Retry-After`
   header (seconds until the client may retry).
 - Rate limits are documented per-endpoint in the OpenAPI specification.
@@ -353,6 +365,7 @@ X-RateLimit-Reset: 1705312800
 ## API Contract
 
 ### OpenAPI Specification
+
 - Every API must have an **OpenAPI 3.0+** specification file.
 - The specification is the **source of truth**. If the code and the spec disagree,
   it is a bug.
@@ -361,6 +374,7 @@ X-RateLimit-Reset: 1705312800
 - The spec includes examples for every request and response schema.
 
 ### Schema Validation
+
 - All incoming request bodies are validated against the OpenAPI schema before
   reaching business logic.
 - Unknown / additional properties in request bodies are rejected with `400`, not
@@ -369,6 +383,7 @@ X-RateLimit-Reset: 1705312800
   drift.
 
 ### Contract Testing
+
 - **Contract tests run in CI** and gate merges. A PR that breaks the API contract
   does not merge.
 - Contract tests verify:

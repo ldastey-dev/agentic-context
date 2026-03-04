@@ -53,7 +53,7 @@ applyTo: "**"
 
 Dependencies point inward. This is non-negotiable.
 
-```
+```text
 Presentation (Controllers / API)
     ↓
 Application (Use Cases / Handlers)
@@ -75,7 +75,7 @@ Infrastructure (Database / External APIs / Messaging)
 
 <!-- PROJECT: Map the directory layout. -->
 
-```
+```text
 <!-- PROJECT: Replace with your actual layout. -->
 ```
 
@@ -103,26 +103,31 @@ Infrastructure (Database / External APIs / Messaging)
 All code must adhere to SOLID. These are not aspirational — they are enforced.
 
 ### Single Responsibility Principle
+
 - Each module, class, and function has exactly one reason to change.
 - Controllers handle HTTP concerns only. Use case handlers contain orchestration only. Domain entities contain business rules only. Infrastructure adapters handle I/O only.
 - Identify God classes (excessive size or dependencies) and God methods (excessive length or nesting) and split them.
 
 ### Open/Closed Principle
+
 - Code is open for extension, closed for modification.
 - New behaviour is added by implementing new classes/functions, not by modifying existing ones.
 - Long `if/elif/switch` chains on type or status indicate missing polymorphism or strategy pattern.
 
 ### Liskov Substitution Principle
+
 - Subtypes are substitutable for their base types without breaking behaviour.
 - No `NotImplementedException` or empty method bodies in interface implementations.
 - Mocks in tests must return data in the same shape as real implementations.
 
 ### Interface Segregation Principle
+
 - Clients depend only on the interfaces they use.
 - No large interfaces that force implementers to provide methods they don't need.
 - Prefer role interfaces (designed around client needs) over header interfaces (1:1 with implementation).
 
 ### Dependency Inversion Principle
+
 - High-level modules depend on abstractions, not concretions.
 - Domain defines interfaces; infrastructure implements them.
 - Concrete classes are injected, never instantiated inline where they are used.
@@ -144,12 +149,14 @@ All code must adhere to SOLID. These are not aspirational — they are enforced.
 ## Clean Code
 
 ### Naming
+
 - Intention-revealing names. Functions are verbs or verb phrases. Booleans are `is_*`/`has_*`.
 - Consistent vocabulary — the same concept always uses the same name across the codebase.
 - No abbreviations except universally known ones (`id`, `url`, `http`, `db`).
 - Use ubiquitous language from the business domain.
 
 ### Functions
+
 - One level of abstraction per function. If a function mixes orchestration with low-level detail, extract the detail.
 - No more than 3 parameters to public functions. Use a structured type (dataclass, record, interface) for groups of related parameters.
 - No side effects in query functions — functions that return data must not modify state.
@@ -157,6 +164,7 @@ All code must adhere to SOLID. These are not aspirational — they are enforced.
 - Command-query separation: a function either performs an action or returns data, not both.
 
 ### Complexity
+
 - Cyclomatic complexity > 10 is a refactoring candidate. > 20 is mandatory.
 - No deep nesting (> 3 levels). Flatten with early returns, extraction, or guard clauses.
 - No commented-out code. No dead code. No unused imports. Use git history, not comments.
@@ -164,6 +172,7 @@ All code must adhere to SOLID. These are not aspirational — they are enforced.
 - Comments explain *why*, never *what*. If the code needs a comment to explain what it does, the code is not clear enough.
 
 ### Type Annotations
+
 - All public function signatures must have complete type annotations.
 - Use modern type syntax (`list[dict]` not `List[Dict]`, `str | None` not `Optional[str]`).
 - Use structured types for return values with more than 3 fields.
@@ -185,61 +194,73 @@ All code must adhere to SOLID. These are not aspirational — they are enforced.
 All code must be assessed against the OWASP Top 10. These are mandatory controls.
 
 ### A01: Broken Access Control
+
 - Authorisation checks on every endpoint that accesses or modifies resources.
 - No predictable/sequential IDs without authorisation — this compounds into trivial enumeration.
 - Validate path parameters to prevent path traversal. Resolve and verify against a base directory.
 
 ### A02: Cryptographic Failures
+
 - Secrets (keys, tokens, passwords, cookies) are bearer credentials — treat them like passwords.
 - Never log secrets at any severity level. Never persist to disk unencrypted.
 - Source from environment variables or secret stores only. Never hardcode.
 
 ### A03: Injection
+
 - Never construct shell commands, SQL queries, or interpreted expressions with unsanitised user input.
 - Parameterise all database queries. No string concatenation for query building.
 - Validate all inputs against allowlists at trust boundaries. Denylist approaches are insufficient.
 
 ### A04: Insecure Design
+
 - Principle of least privilege: read operations are separate from write/delete operations.
 - Destructive operations require multi-step confirmation (e.g., trash before delete).
 - Rate limit sensitive operations (login, password reset, MFA verification).
 
 ### A05: Security Misconfiguration
+
 - No `DEBUG=True` or verbose logging exposing credentials in non-development environments.
 - `.env` files are gitignored. `.env.example` contains only placeholder values.
 - Dependencies are pinned in a lock file. Never install without the lock file.
 
 ### A06: Vulnerable & Outdated Components
+
 - Run dependency vulnerability scanning (`pip-audit`, `npm audit`, `trivy`, `snyk`) in CI.
 - Block merges on HIGH or CRITICAL CVEs. Exceptions require documented suppression with expiry date.
 - Keep direct dependencies up to date. Review changelogs before upgrading.
 
 ### A07: Identification & Authentication Failures
+
 - Handle credential expiry gracefully with clear error messages.
 - Never retry with expired credentials — they will not self-resolve.
 - Session tokens must have appropriate lifetimes. Secure cookie flags (HttpOnly, Secure, SameSite) where applicable.
 
 ### A08: Software & Data Integrity Failures
+
 - Verify lock file integrity in CI. Fail if out of sync with the manifest.
 - Never `eval()` or `exec()` data from external sources or user input.
 - No unsigned or unverified code in the deployment pipeline.
 
 ### A09: Security Logging & Monitoring Failures
+
 - Log all mutating operations (create, update, delete) at INFO with resource identifiers — never content or credentials.
 - Use structured logging. Never concatenate user data into log format strings (log injection risk).
 - Do not silently suppress exceptions.
 
 ### A10: Server-Side Request Forgery (SSRF)
+
 - Never fetch arbitrary URLs based on user-provided input.
 - If fetching external URLs is required, validate against an allowlist of known domains.
 - File operations accept local paths only, not URLs, unless explicitly designed for URL fetching.
 
 ### Security Path Analysis
+
 - Trace every code path handling user input or sensitive data from entry to exit. Identify trust boundaries and privilege transitions.
 - Ask: what if this input is malicious? What if this check is bypassed? What if this dependency is compromised?
 - Think like an attacker — defensive checklists catch known issues; adversarial thinking catches novel ones.
 
 ### Secure Defaults
+
 - TLS for all external communication. Strong algorithms (AES-256, SHA-256+, bcrypt/argon2, Ed25519/RSA-2048+).
 - Secure HTTP headers (HSTS, CSP, X-Content-Type-Options, X-Frame-Options). CORS restricted to known origins.
 
@@ -251,21 +272,25 @@ All code must be assessed against the OWASP Top 10. These are mandatory controls
 The Test Trophy (Kent C. Dodds) prioritises investment (largest to smallest): integration tests → unit tests → E2E tests, on a foundation of static analysis.
 
 ### Behavioural Testing
+
 - Tests describe **what the system does** (inputs → outputs), not how it does it internally.
 - Tests must be resilient to refactoring — if the implementation changes but behaviour does not, tests must not break.
 - Assertions verify business-meaningful outcomes, not incidental details.
 
 ### Test-First Workflow
+
 - **Bugs:** Write a test asserting correct expected behaviour. It fails (bug exists). Fix the code. Test passes. The test came first.
 - **Refactoring:** Write tests capturing correct current behaviour. They pass. Refactor. They still pass. Never write tests that enshrine broken behaviour.
 - **New features:** Write acceptance criteria as tests first. Implement to make them pass.
 
 ### Coverage
+
 - Minimum **90% line coverage** enforced in CI. Coverage must not decrease between commits.
 - New code must have tests covering happy path + at least one error/edge case.
 - Coverage is a signal, not a goal — 100% with meaningless assertions is worse than 80% of critical paths.
 
 ### Quality
+
 - Deterministic: no time-dependent tests without clock abstraction, no order-dependent tests.
 - Isolated: each test sets up its own context. No shared mutable state between tests.
 - No flaky tests. Fix or delete them. They erode trust in the suite.
@@ -298,11 +323,13 @@ Every PR to the main branch must pass all stages. No exceptions, no manual overr
 -->
 
 ### Branch Protection
+
 - Main branch requires: all status checks pass, at least 1 approving review, branch up to date, no force push.
 - Stale reviews dismissed when new commits are pushed.
 - No bypassing these rules, including for admins.
 
 ### Commit Messages
+
 - Conventional Commits format: `feat:`, `fix:`, `docs:`, `chore:`, `refactor:`, `test:`, `ci:`.
 - No `[skip ci]` except for documentation-only changes with path filters configured.
 
@@ -319,6 +346,7 @@ Pipeline speed is a feature. Optimise for the shortest possible feedback loop.
 - **Trunk-based development.** Main is always deployable. All work integrates to main frequently.
 
 ### Release Process
+
 - All CI gates must pass on the tagged commit.
 - Publish via automated pipeline, not manual steps.
 - Create release with auto-generated release notes.
@@ -389,11 +417,13 @@ Additional RED metrics (Rate, Errors, Duration) per endpoint. USE metrics (Utili
 ### Correlation
 
 All three pillars must be correlatable:
+
 - Every log line includes `traceId` and `spanId`.
 - Every span includes the same `traceId`.
 - Metrics use the same attribute names as logs and spans.
 
 ### Sensitive Data Policy
+
 - Allowlist, don't blocklist. Only emit known-safe attribute values.
 - Never log, trace, or record credentials, tokens, or PII as metric attributes.
 - Sanitise error messages before logging — strip stack traces that may contain environment variable values.
@@ -403,9 +433,11 @@ All three pillars must be correlatable:
 ## Resilience & Fault Tolerance
 
 ### Circuit Breakers
+
 - Implement on all external dependency calls. Monitor failure rate. Open the circuit when threshold is exceeded. Half-open state for recovery detection.
 
 ### Retry Policies
+
 - Exponential backoff with jitter: `base_delay * 2^attempt + random(0, 0.5)` seconds.
 - Maximum 3 attempts. Bounded total retry time.
 - Only retry transient failures: 5xx responses, timeouts, connection refused.
@@ -413,25 +445,30 @@ All three pillars must be correlatable:
 - Log every retry attempt at WARN with attempt number and exception type.
 
 ### Timeouts
+
 - Explicit timeouts on ALL external calls: HTTP, database, message queue, cache.
 - Timeout hierarchy: inner timeouts shorter than outer timeouts.
 - Never allow unbounded waits. Default to a conservative timeout rather than no timeout.
 
 ### Graceful Degradation
+
 - When a dependency is unavailable: serve cached/stale data, disable non-critical features, or return partial results with a degradation indicator.
 - Never fail entirely because a non-critical dependency is down.
 
 ### Bulkhead Isolation
+
 - Critical paths are isolated from non-critical paths.
 - Separate connection pools, thread pools, or resource limits per dependency.
 - A failure in one component must not exhaust resources for all components.
 
 ### Idempotency
+
 - Operations that may be retried (by clients or retry policies) must be idempotent.
 - Use idempotency keys for POST operations (creation, payments, critical writes).
 - Handle duplicate message delivery gracefully.
 
 ### Back-pressure
+
 - When overwhelmed, signal back-pressure: 429 responses with `Retry-After`, queue depth limits, load shedding.
 - Never accept more work than can be processed.
 
@@ -440,6 +477,7 @@ All three pillars must be correlatable:
 ## Performance & Scalability
 
 ### Database Access
+
 - **No N+1 queries.** This is the most common and impactful performance anti-pattern. Check ORM eager/lazy loading configuration. Every list operation that triggers per-item queries is a defect.
 - No `SELECT *` — request only the fields needed.
 - All collection queries must have `LIMIT`/pagination. No unbounded result sets.
@@ -447,6 +485,7 @@ All three pillars must be correlatable:
 - Connections managed via pool. Never create per-request connections.
 
 ### Memory & Resources
+
 - Dispose all resources deterministically: connections, streams, file handles, HTTP clients. Use `using`/`try-with-resources`/`finally`/context managers.
 - **Memory leak vigilance.** Actively identify potential leaks: unclosed event listeners, unsubscribed observables, uncleared timers/intervals, closures retaining large scopes, and collections growing without eviction. Every subscription must have a corresponding unsubscription. Every timer must have a corresponding cancellation.
 - HTTP clients are reused (not created per request). Connection pools are configured with appropriate limits.
@@ -454,16 +493,19 @@ All three pillars must be correlatable:
 - No string concatenation in loops — use builders or join.
 
 ### Caching
+
 - Cache-first for read-heavy operations. Check cache before making network requests.
 - Every cache entry has an eviction policy. No grow-without-bound caches.
 - Protect against cache stampede on popular keys (locking, stale-while-revalidate).
 
 ### Async/Concurrency
+
 - No sync-over-async (blocking on async code) or async-over-sync (wrapping sync in tasks unnecessarily).
 - Bound concurrent outbound calls with semaphores or throttling.
 - Shared mutable state must be synchronised. Prefer immutable data structures.
 
 ### Scalability
+
 - Application should be stateless. Session state stored externally if needed.
 - No shared in-process state that prevents horizontal scaling.
 - Identify and eliminate contention points: global locks, single queues, hot partitions.
@@ -486,18 +528,21 @@ All three pillars must be correlatable:
 ## Operational Excellence
 
 ### Configuration
+
 - All configuration via environment variables. No hardcoded values, URLs, credentials, or magic numbers.
 - Required variables validated at startup with clear error messages listing exactly which variables are missing.
 - Defaults are safe and conservative.
 - Secrets managed separately from non-sensitive configuration.
 
 ### Error Handling
+
 - All public-facing operations return structured error responses: `{"error": "Human-readable message"}`.
 - Raise specific, descriptive exceptions. No bare `except:` or `catch(Exception)`.
 - Never expose raw stack traces, internal paths, or implementation details to callers.
 - Distinguish retryable from non-retryable errors. Communicate this to callers.
 
 ### Change Management
+
 - PRs are small, focused, single-concern. One logical change per PR.
 - Commit messages follow Conventional Commits.
 - Never force-push to main. Always use PRs.

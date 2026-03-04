@@ -6,7 +6,7 @@ Import into any repository to get consistent AI-assisted development across all 
 ## Supported Agents
 
 | Agent | File(s) read | How |
-|-------|-------------|-----|
+| ----- | ------------ | --- |
 | **Devin** | `AGENTS.md` | Native (always-on) |
 | **Cursor** | `.cursor/rules/standards.mdc` → `AGENTS.md` | Redirect with `alwaysApply: true` |
 | **Windsurf** | `.windsurfrules` → `AGENTS.md` | Redirect |
@@ -23,13 +23,14 @@ cp -a templates/. <target-repo>/
 ```
 
 Then fill in all `[CONFIGURE]` sections in:
+
 - `AGENTS.md` — project overview, tech stack, architecture, conventions
 - `CLAUDE.md` — project overview, tech stack, commands
 - `.github/copilot-instructions.md` — project context, tech stack, architecture
 
 ## Repository Structure
 
-```
+```text
 templates/                              Importable agent config
   AGENTS.md                             Canonical coding standards (Devin, Cursor, Windsurf)
   CLAUDE.md                             Claude Code instructions (delegates to AGENTS.md)
@@ -89,7 +90,7 @@ playbooks/                              Standalone prompts (paste into any agent
 Standards are maintained in **one place only**:
 
 | What | Where |
-|------|-------|
+| ---- | ----- |
 | Core coding standards | `templates/AGENTS.md` |
 | Per-concern detail | `templates/.github/instructions/{concern}.instructions.md` |
 | Copilot project scaffold | `templates/.github/copilot-instructions.md` |

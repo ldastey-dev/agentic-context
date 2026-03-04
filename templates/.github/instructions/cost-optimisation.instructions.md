@@ -13,6 +13,7 @@ and become critical when services are deployed to cloud environments.
 ## 1 · API & Token Economy
 
 ### Eliminate Redundant Calls
+
 - **Cache-first reads.** Always check local or in-memory caches before making
   network requests. Use `[CACHE_STRATEGY]` (e.g., in-memory LRU, on-disk cache,
   Redis) appropriate to the data's freshness requirements.
@@ -27,6 +28,7 @@ and become critical when services are deployed to cloud environments.
   a network round-trip.
 
 ### Measure and Track
+
 - Log `duration_ms` on every operation so slow or chatty patterns can be
   identified via log analysis.
 - Consider adding a `cache_hit` boolean attribute to structured logs so cache
@@ -53,6 +55,7 @@ Answer **all** of the following:
    acceptable. Copyleft (GPL, AGPL) requires legal review.
 
 ### Ongoing Hygiene
+
 - Pin exact versions for direct dependencies to prevent unexpected cost from
   debugging non-reproducible builds.
 - Run `[PACKAGE_MANAGER]` outdated/audit commands periodically and evaluate
@@ -65,6 +68,7 @@ Answer **all** of the following:
 ## 3 · Data Transfer Efficiency
 
 ### Result Pagination
+
 - Enforce a sensible default page size and a hard maximum. Large unbounded
   responses waste bandwidth, memory, and (for LLM consumers) tokens.
 - When consumers need more results, prefer refined queries or cursor-based
@@ -77,6 +81,7 @@ Answer **all** of the following:
 | Export / bulk           |                 500 |        5 000 |
 
 ### Payload Minimisation
+
 - Strip internal-only or empty fields from API responses before returning them.
   Centralise this in a shared utility rather than per-endpoint ad-hoc trimming.
 - Prefer returning identifiers and summaries over full nested objects. Consumers
@@ -86,6 +91,7 @@ Answer **all** of the following:
   egress costs and latency.
 
 ### Compression
+
 - Enable gzip or brotli response compression on all HTTP endpoints. Even small
   JSON payloads benefit from 60–80% compression ratios.
 - For inter-service communication, consider binary serialisation (Protocol
@@ -105,6 +111,7 @@ Answer **all** of the following:
 | Reserved / savings     | Stable baseline; commit only after measurement  |
 
 ### Serverless (Lambda, Cloud Functions)
+
 - Start with the smallest memory tier and benchmark. Use power-tuning tools to
   find the cost-optimal setting.
 - Keep deployment packages small. Exclude test files, docs, and dev dependencies
@@ -112,11 +119,13 @@ Answer **all** of the following:
 - Set reserved concurrency to prevent runaway scaling costs from retry storms.
 
 ### Containers (ECS, Kubernetes, Cloud Run)
+
 - Right-size vCPU and memory using observability data — do not guess.
 - Use Spot/preemptible instances for non-latency-sensitive workloads.
 - Implement graceful shutdown to avoid wasted compute during scale-down.
 
 ### Local / On-Demand Processes
+
 - Prefer on-demand subprocesses over persistent daemons for infrequent tasks.
 - Initialise expensive clients once per process lifetime (singleton / lazy init).
   Do not recreate clients per request.
@@ -147,6 +156,7 @@ Answer **all** of the following:
 When output is consumed by LLMs, every token has a direct monetary cost.
 
 ### Output Discipline
+
 - Return **structured, concise** data. Prefer flat objects over deeply nested
   structures.
 - Strip verbose metadata fields the LLM is unlikely to use (internal timestamps,
@@ -157,6 +167,7 @@ When output is consumed by LLMs, every token has a direct monetary cost.
   concise — every extra word costs tokens on every request.
 
 ### Limit Defaults
+
 - All list/search operations should default to a conservative limit (e.g., 50),
   not the maximum. This balances usefulness with token economy.
 - Consumers can explicitly request higher limits when needed.
@@ -166,6 +177,7 @@ When output is consumed by LLMs, every token has a direct monetary cost.
 ## 7 · CI/CD Cost Controls
 
 ### Pipeline Design
+
 - Use the cheapest runner tier (e.g., `ubuntu-latest`) unless a specific OS is
   required.
 - Enable dependency caching via `[PACKAGE_MANAGER]` cache support to avoid
@@ -182,6 +194,7 @@ When output is consumed by LLMs, every token has a direct monetary cost.
 - Use conditional stages to skip integration tests on documentation-only changes.
 
 ### Artefact Retention
+
 - Set short retention periods (e.g., 7 days) on ephemeral CI artefacts. Default
   retention (often 90 days) wastes storage.
 - Keep release artefacts longer than CI artefacts — apply distinct policies.
@@ -191,6 +204,7 @@ When output is consumed by LLMs, every token has a direct monetary cost.
 ## 8 · Observability Cost Efficiency
 
 ### Log Volume
+
 - Default log level is `INFO`. Never set `DEBUG` in production — it generates
   10–100× more volume with minimal operational value.
 - Do not log full request/response payloads at INFO level. Log only metadata
@@ -200,6 +214,7 @@ When output is consumed by LLMs, every token has a direct monetary cost.
   - Production: 30 days (or 90 days if regulatory requirements exist)
 
 ### Metrics
+
 - Use in-process aggregation (histograms, counters). Do not emit per-request
   metric log lines — this duplicates cost between logs and metrics backends.
 - Set the metrics export interval conservatively (e.g.,
@@ -209,6 +224,7 @@ When output is consumed by LLMs, every token has a direct monetary cost.
   request IDs) on metrics — use traces for per-request detail instead.
 
 ### Sampling
+
 - Apply trace sampling (e.g., 10–25% in production) to control observability
   backend costs while maintaining statistical significance.
 - Use head-based sampling for general traffic; tail-based sampling to capture
@@ -219,12 +235,14 @@ When output is consumed by LLMs, every token has a direct monetary cost.
 ## 9 · Supply Chain Cost
 
 ### Licence Compliance
+
 - Every dependency must have a permissive licence (MIT, Apache-2.0, BSD-2/3).
 - Audit licences using `[PACKAGE_MANAGER]` licence commands before adding new
   packages. A copyleft dependency in a commercial deployment creates legal and
   financial risk.
 
 ### Vulnerability Response
+
 - Fix HIGH/CRITICAL CVEs within 7 days. Delayed patching increases incident
   response cost.
 - Run dependency audits in CI — do not suppress findings without a documented

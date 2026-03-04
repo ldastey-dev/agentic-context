@@ -13,6 +13,7 @@ feature — not an afterthought to be addressed when things break under load.
 ## 1 · Memory & Resource Management
 
 ### Disposal & Lifecycle
+
 - Every resource that implements a disposable/closeable interface (connections,
   file handles, streams, HTTP clients, database sessions) must be released
   deterministically. Use the language-idiomatic disposal pattern (`using`,
@@ -26,6 +27,7 @@ feature — not an afterthought to be addressed when things break under load.
   process under sustained load.
 
 ### Connection Pooling
+
 - HTTP clients, database connections, and message broker connections must be
   pooled and reused — never created per-request. A new connection per request
   adds latency and risks port/socket exhaustion.
@@ -35,6 +37,7 @@ feature — not an afterthought to be addressed when things break under load.
   connections that fail on first use degrade reliability.
 
 ### Buffer Management
+
 - Never read an entire file, stream, or response body into memory without a
   known upper bound on size. Use streaming reads with fixed-size buffers for
   any data source that can grow unboundedly.
@@ -43,6 +46,7 @@ feature — not an afterthought to be addressed when things break under load.
   re-allocation.
 
 ### Resource Exhaustion Handling
+
 - Code must handle resource exhaustion gracefully (out-of-memory, file
   descriptor limits, connection pool exhaustion, disk full). The failure mode
   must be a structured error response — never an unhandled crash.
@@ -72,6 +76,7 @@ must execute even when exceptions occur.
 ## 2 · Algorithm & Data Structure Efficiency
 
 ### Time Complexity
+
 - No O(n²) or worse algorithms on data sets that can grow unboundedly. If
   the input size is not capped by design, the algorithm must be O(n log n) or
   better.
@@ -82,6 +87,7 @@ must execute even when exceptions occur.
   replaced with a set or map lookup.
 
 ### Space Complexity
+
 - Do not materialise an entire result set in memory when only a subset or
   aggregate is needed. Use streaming, pagination, or server-side aggregation.
 - Intermediate collections created during transformation must not duplicate
@@ -89,6 +95,7 @@ must execute even when exceptions occur.
   language supports them.
 
 ### Correct Collection Types
+
 - Use hash-based collections (HashMap, HashSet, Dictionary) for frequent
   lookups — not lists or arrays.
 - Use ordered collections only when ordering is a requirement. Unneeded
@@ -98,6 +105,7 @@ must execute even when exceptions occur.
   non-thread-safe collection unless no concurrent alternative exists.
 
 ### String Handling
+
 - String concatenation inside a loop must use a mutable builder (StringBuilder,
   StringBuffer, list-join pattern) — never repeated immutable concatenation.
   Each concatenation allocates a new string object and copies all previous
@@ -106,6 +114,7 @@ must execute even when exceptions occur.
   compiled inside a loop or hot path.
 
 ### Unnecessary Computation
+
 - Do not recompute a value inside a loop when the result is loop-invariant.
   Hoist invariant computations above the loop.
 - Do not call a function with side-effect-free, deterministic results
@@ -117,6 +126,7 @@ must execute even when exceptions occur.
 ## 3 · Database Access Patterns
 
 ### N+1 Query Prevention
+
 - Any code path that executes a query inside a loop iterating over a parent
   result set is an N+1 violation. Replace with a batch query (WHERE IN),
   a JOIN, or an eager-load directive.
@@ -125,6 +135,7 @@ must execute even when exceptions occur.
   known at query time.
 
 ### Index Awareness
+
 - Every WHERE clause, JOIN condition, and ORDER BY column in a new or modified
   query must have a supporting index. If the index does not exist, the PR must
   either add a migration to create it or document why a table scan is
@@ -133,6 +144,7 @@ must execute even when exceptions occur.
   unless the query pattern requires a different prefix.
 
 ### Over-Fetching
+
 - SELECT * is prohibited in application code. Select only the columns the
   code path actually uses. Over-fetching wastes network bandwidth, memory,
   and deserialization time.
@@ -140,6 +152,7 @@ must execute even when exceptions occur.
   relationships the calling code needs — never the entire object graph.
 
 ### Unbounded Queries
+
 - Every query that can return a variable number of rows must include a LIMIT
   (or equivalent). A query without LIMIT on a growing table is a latent
   out-of-memory or timeout incident.
@@ -147,6 +160,7 @@ must execute even when exceptions occur.
   be able to request an unbounded result set.
 
 ### Connection Lifecycle
+
 - Database connections must be acquired as late as possible and released as
   early as possible. Never hold a connection open across I/O to external
   systems, user-facing waits, or long computations.
@@ -154,6 +168,7 @@ must execute even when exceptions occur.
   waiting for a connection will hang under pool exhaustion.
 
 ### Transaction Scope
+
 - Transactions must be as short as possible. Never perform HTTP calls,
   filesystem I/O, or user-interaction logic inside a transaction.
 - Read-only operations must use read-only transactions or no transactions
@@ -162,6 +177,7 @@ must execute even when exceptions occur.
   transactions via ORM save points are a source of subtle deadlocks.
 
 ### Write Amplification
+
 - Batch inserts and updates must use bulk operations — never individual
   INSERT or UPDATE statements in a loop.
 - UPDATE statements must set only changed columns — never overwrite the
@@ -175,6 +191,7 @@ must execute even when exceptions occur.
 ## 4 · Caching Strategy
 
 ### When to Cache
+
 - Any read operation that is called frequently with the same inputs and
   produces deterministic, non-user-specific results must be evaluated for
   caching. The default is to cache expensive computations and remote calls
@@ -184,6 +201,7 @@ must execute even when exceptions occur.
   at the appropriate level (request-scoped, instance-scoped, or shared).
 
 ### Cache Invalidation
+
 - Every cache must have an explicit invalidation strategy documented at the
   point of creation. A cache without invalidation is a stale data bug waiting
   to happen.
@@ -193,18 +211,21 @@ must execute even when exceptions occur.
   used when stale data is unacceptable and TTL alone is insufficient.
 
 ### Cache Stampede Protection
+
 - Caches that expire on high-traffic keys must implement stampede protection
   (lock-based recomputation, probabilistic early expiration, or request
   coalescing). Multiple concurrent cache misses for the same key must not
   all hit the backing store simultaneously.
 
 ### Cache Sizing & Eviction
+
 - Every in-memory cache must have a maximum size or entry count. Unbounded
   caches are memory leaks.
 - Eviction policy (LRU, LFU, TTL) must be chosen based on the access pattern
   and documented. Do not accept library defaults without explicit evaluation.
 
 ### Cache Level
+
 - Cache at the level closest to the consumer that still provides correctness:
   in-process for single-instance services, distributed (Redis, Memcached) for
   multi-instance deployments.
@@ -216,6 +237,7 @@ must execute even when exceptions occur.
 ## 5 · Async/Concurrency Correctness
 
 ### Missing Await
+
 - Every call to an async function must be awaited (or explicitly scheduled
   for background execution with error handling). A missing await silently
   drops the operation and can cause resource leaks, lost writes, and
@@ -224,6 +246,7 @@ must execute even when exceptions occur.
   treated as errors.
 
 ### Sync-over-Async
+
 - Synchronous blocking calls (Thread.Sleep, time.sleep, synchronous HTTP,
   synchronous file I/O) must never be made inside an async context. Blocking
   the async thread pool starves other concurrent operations and degrades
@@ -232,6 +255,7 @@ must execute even when exceptions occur.
   dedicated thread pool — never block the main event loop.
 
 ### Thread Safety
+
 - Shared mutable state accessed from multiple threads must be protected by
   synchronisation primitives (locks, atomic operations, concurrent
   collections). Unprotected shared state is a data corruption bug.
@@ -241,6 +265,7 @@ must execute even when exceptions occur.
   language-level guarantees, or atomic initialisation patterns).
 
 ### Deadlock Prevention
+
 - Never acquire multiple locks in inconsistent order. If multiple locks are
   needed, define and document a global lock ordering.
 - Never perform blocking I/O while holding a lock. Acquire the lock only for
@@ -249,6 +274,7 @@ must execute even when exceptions occur.
   thread pool — this is a deadlock.
 
 ### Unbounded Parallelism
+
 - Never launch an unbounded number of concurrent tasks, threads, or
   goroutines proportional to input size. Use a semaphore, thread pool, or
   concurrency limiter with an explicit upper bound.
@@ -256,6 +282,7 @@ must execute even when exceptions occur.
   overwhelming downstream dependencies.
 
 ### Task Management
+
 - Long-running background tasks must be cancellable and must respond to
   cancellation signals promptly. Fire-and-forget tasks that ignore shutdown
   signals cause resource leaks and delayed shutdowns.
@@ -267,6 +294,7 @@ must execute even when exceptions occur.
 ## 6 · Scalability
 
 ### Statelessness
+
 - Application instances must not store request-scoped or session-scoped state
   in local memory or on the local filesystem. All state must be externalised
   to a shared store (database, cache, object storage) so that any instance can
@@ -276,6 +304,7 @@ must execute even when exceptions occur.
   must not break correctness.
 
 ### Horizontal Scaling Readiness
+
 - No code path may assume it is the only running instance. File locks, local
   singletons, in-memory queues, and local cron-style schedulers all break
   under horizontal scaling.
@@ -286,6 +315,7 @@ must execute even when exceptions occur.
   UUIDs, ULIDs, or a distributed ID generator.
 
 ### Contention Points
+
 - Identify and eliminate single points of serialisation. A single shared
   resource (lock, queue, table row, counter) that all requests must access
   sequentially is a throughput ceiling.
@@ -296,6 +326,7 @@ must execute even when exceptions occur.
   flagged as scaling risks and documented with mitigation plans.
 
 ### Hot Partitions
+
 - Data distribution across partitions (database shards, message queue
   partitions, cache nodes) must be evaluated for uniformity. A partition key
   that concentrates traffic on a single node defeats the purpose of

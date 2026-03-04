@@ -7,7 +7,7 @@ It is not a software project — it contains Markdown files that are imported in
 
 ## Repository Structure
 
-```
+```text
 templates/                 Importable agent config (cp -a templates/. <target-repo>/)
   AGENTS.md                Canonical coding standards (Devin, Cursor, Windsurf)
   CLAUDE.md                Claude Code instructions (delegates to AGENTS.md)

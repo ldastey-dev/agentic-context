@@ -89,6 +89,7 @@ Integration tests run only when an environment variable or repository secret
 normal CI runs to keep feedback fast.
 
 ### Stage 8 · Secret Scanning
+
 - Enable at the repository level via **GitHub Advanced Security** / secret scanning.
 - Optionally add a CI step using a tool like `gitleaks`, `trufflehog`, or the
   scanner of your choice to catch credential leaks before they reach the remote.
