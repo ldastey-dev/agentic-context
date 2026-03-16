@@ -1,0 +1,8 @@
+---
+description: Project coding standards and conventions
+alwaysApply: true
+---
+
+Follow the rules defined in AGENTS.md at the repository root. That file is the
+single source of truth for all coding standards, architecture decisions, and
+workflow conventions.
