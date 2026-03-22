@@ -1,5 +1,7 @@
 **/reviews/
 **.vscode/
+**/.claude/
+CLAUDE.md
 
 # Local Claude Code settings (not shared)
 .claude/settings.local.json

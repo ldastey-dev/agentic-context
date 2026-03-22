@@ -1,31 +1,47 @@
 # AI Agent Prompts & Playbooks for Context Engineering
 
-A template library of coding standards, assessment playbooks, PR review playbooks, reusable skills, and agent configuration files. Import into any repository to get consistent AI-assisted development across all major coding agents.
+A template library of coding standards, assessment playbooks, PR review playbooks, and agent configuration files. Import into any repository to get consistent AI-assisted development across all major coding agents.
 
 ## Context-Optimised Architecture
 
-Content is organised into three tiers that control when files load into agent context:
+Content is organised to minimise always-in-context footprint and load detail on demand:
 
 | Tier | Directory | When loaded | Purpose |
 | ---- | --------- | ----------- | ------- |
-| **1 — Always in context** | `core/` | Session start | Lean project config, workflow rules, standards reference table |
-| **2 — Auto-matched on demand** | `skills/` | When task matches skill description | Playbooks, runbooks, and standards as Claude Code skills |
-| **3 — Reference** | `standards/` | When explicitly read | Detailed per-concern standards accessible to all agents |
+| **1 — Always in context** | `core/` | Session start | Lean project config (~60 lines), context index, conventions |
+| **2 — On demand** | `playbooks/` | When task matches keywords | Assessment, review, planning, and refactoring procedures |
+| **3 — Reference** | `standards/` | When domain matches keywords | Detailed per-concern standards (security, testing, etc.) |
 
-**Result:** ~85% reduction in startup context. Agents get the minimum context needed for any task, with detailed guidance available on demand.
+**Result:** Always-in-context is ~60 lines of AGENTS.md plus a routing table. All detail loads on demand via keyword matching in `.context/index.md`.
+
+## How Context Loading Works
+
+The `.context/index.md` file is a keyword-to-file routing table. Every agent — Claude Code, Cursor, Copilot, Devin, Windsurf — is instructed to read this index before starting a task and load files matching the current domain.
+
+This is the cross-agent mechanism: any LLM-based agent can read a markdown table and match keywords. No proprietary skill system required.
+
+For **Claude Code** and **GitHub Copilot** specifically, `deploy.sh` generates thin skill wrappers (`.claude/skills/` and `.github/skills/` respectively) that provide native auto-matching. The playbook is the single source of truth; the skill wrapper is a disposable adapter.
+
+### Example
+
+User says: "refactor the authentication module"
+
+1. Agent reads `.context/index.md`
+2. Matches keyword "refactor" → `.context/playbooks/refactor/safe-refactor.md`
+3. Matches keyword "auth" + "security" → `.context/standards/security.md`
+4. Loads both files and follows the playbook
 
 ## Supported Agents
 
 | Agent | File(s) read | How |
 | ----- | ------------ | --- |
-| **Devin** | `AGENTS.md`, `.devin/devin.json` | Native — reads `AGENTS.md` (always-on) + `.devin/devin.json` for DeepWiki and knowledge config |
+| **Devin** | `AGENTS.md`, `.devin/devin.json` | Native — reads `AGENTS.md` + `.context/index.md` via instructions |
 | **Cursor** | `.cursor/rules/standards.mdc` → `AGENTS.md` | Redirect with `alwaysApply: true` |
 | **Windsurf** | `.windsurfrules` → `AGENTS.md` | Redirect |
-| **Claude Code** | `CLAUDE.md` → `AGENTS.md` + `.claude/skills/` | Delegation + on-demand skill loading |
-| **GitHub Copilot** | `.github/copilot-instructions.md` | Native auto-load; references `standards/` |
-| **Cline / Roo Code** | `.clinerules` → `AGENTS.md` | Redirect |
+| **Claude Code** | `CLAUDE.md` → `AGENTS.md` + `.claude/skills/` | Delegation + generated skill wrappers |
+| **GitHub Copilot** | `.github/copilot-instructions.md` → `AGENTS.md` + `.github/skills/` | Delegation + generated skill wrappers |
 
-`AGENTS.md` is the **single source of truth** for project conventions and workflow rules. Agent config files delegate to it.
+`AGENTS.md` is the **single source of truth** for project conventions. All agent config files redirect to it and to `.context/index.md`.
 
 ## Quick Start
 
@@ -33,26 +49,29 @@ Content is organised into three tiers that control when files load into agent co
 ./deploy.sh /path/to/target-repo
 ```
 
-Then fill in all `[CONFIGURE]` sections in:
-
-- `AGENTS.md` — project overview, tech stack, architecture, conventions
-- `CLAUDE.md` — project-specific rules
-- `.github/copilot-instructions.md` — project context, tech stack, architecture
+Then fill in all `[CONFIGURE]` sections in `AGENTS.md` and `CLAUDE.md`.
 
 ## Repository Structure
 
 ```text
 core/                                   Tier 1 — always in context (→ target repo root)
-  CLAUDE.md                             Claude Code config (lean, ~30 lines)
-  AGENTS.md                             Canonical conventions hub (lean, ~265 lines)
-  .clinerules                           Cline/Roo redirect → AGENTS.md
+  AGENTS.md                             Lean project config (~60 lines)
+  CLAUDE.md                             Claude Code config (→ AGENTS.md + index)
+  .context/
+    index.md                            Keyword → file routing table
+    conventions/
+      code.md                           Naming, patterns, imports, core principles
+      workflow.md                       Workflow orchestration, task management
+      communication.md                  Writing standards, communication style
   .windsurfrules                        Windsurf redirect → AGENTS.md
-  .cursor/rules/standards.mdc           Cursor redirect → AGENTS.md
-  .devin/devin.json                     Devin config + AGENTS.md pointer
-  .github/copilot-instructions.md       GitHub Copilot project instructions
+  .cursor/rules/standards.mdc           Cursor redirect → AGENTS.md + index
+  .devin/devin.json                     Devin config + index pointer
+  .github/copilot-instructions.md       Copilot redirect → AGENTS.md
   .claude/settings.json                 Claude Code permissions + hooks template
+                                        (skill wrappers in .claude/skills/ and
+                                        .github/skills/ are generated by deploy.sh)
 
-standards/                              Tier 3 — reference (→ target standards/)
+standards/                              Tier 3 — reference (→ target .context/standards/)
   code-quality.md                       SOLID, DRY, Clean Code, Clean Architecture
   security.md                           OWASP Top 10 security checklist
   testing.md                            Test Trophy Model, coverage, fixtures
@@ -66,31 +85,41 @@ standards/                              Tier 3 — reference (→ target standar
   aws-well-architected.md               AWS Well-Architected Framework (6 pillars)
   gdpr.md                               GDPR data protection standards
   pci-dss.md                            PCI DSS payment card data standards
+  accessibility.md                      WCAG 2.2 Level AA accessibility standards
 
-skills/                                 Tier 2 — on demand (→ target .claude/skills/)
-  assess-*/SKILL.md                     Assessment playbooks (11 skills)
-  review-*/SKILL.md                     PR review playbooks (9 skills)
-  plan-*/SKILL.md                       Planning playbooks (4 skills)
-  safe-refactor/SKILL.md                Behaviour-preserving refactoring runbook
-  extract-module/SKILL.md               Module/service extraction runbook
-  dependency-upgrade/SKILL.md           Major dependency upgrade runbook
-  ref-*/SKILL.md                        Standards as model-invocable skills (13 skills)
+playbooks/                              Tier 2 — on demand (→ target .context/playbooks/)
+  assess/                               Structured codebase-level assessments (12)
+    accessibility.md, api-design.md, architecture.md, code-quality.md,
+    compliance.md, full.md, iac.md, observability.md, performance.md,
+    security.md, tech-debt.md, test-coverage.md
+  review/                               PR-level and change-level reviews (10)
+    accessibility.md, api-design.md, architecture.md, code-quality.md,
+    compliance.md, iac.md, observability.md, performance.md,
+    security.md, test-coverage.md
+  plan/                                 Design and decision documents (4)
+    adr.md, design-doc.md, risk-assessment.md, spike.md
+  refactor/                             Structured code change procedures (3)
+    safe-refactor.md, extract-module.md, dependency-upgrade.md
 ```
 
-## How Skills Work
+## Playbook Format
 
-Skills are Claude Code's mechanism for on-demand context loading. Each skill has:
+Playbooks use a universal markdown format with YAML frontmatter:
 
-- A **description** (~100 bytes) loaded at session start — used for automatic matching
-- **Full content** loaded only when the skill fires (user invocation or model match)
+```yaml
+---
+name: assess-security
+description: "Run comprehensive OWASP Top 10 security assessment..."
+keywords: [assess security, security audit, threat model]
+---
 
-| Category | Prefix | Invocation | Model-invocable |
-| -------- | ------ | ---------- | --------------- |
-| Assessment playbooks | `assess-` | `/assess-security`, `/assess-architecture`, etc. | Yes |
-| Review playbooks | `review-` | `/review-security`, `/review-code-quality`, etc. | Yes |
-| Planning playbooks | `plan-` | `/plan-design-doc`, `/plan-adr`, etc. | Yes |
-| Runbooks | (none) | `/safe-refactor`, `/extract-module`, `/dependency-upgrade` | Yes |
-| Standards | `ref-` | Hidden from menu | Yes (auto-loads when domain matches) |
+# Security Assessment
+
+## Phase 1: Discovery
+...
+```
+
+The `keywords` field feeds the context index. The `description` field is used by `deploy.sh` to generate Claude Code and GitHub Copilot skill wrappers. The content is plain markdown that any agent can read and follow.
 
 ## Conventions
 
@@ -110,14 +139,13 @@ Standards are maintained in **one place only**:
 | ---- | ----- |
 | Project conventions and workflow | `core/AGENTS.md` |
 | Per-concern detail | `standards/{concern}.md` |
-| Standards as skills (Claude) | `skills/ref-{concern}/SKILL.md` |
-| Copilot project scaffold | `core/.github/copilot-instructions.md` |
-
-When updating a detailed standard, update both `standards/{concern}.md` and `skills/ref-{concern}/SKILL.md` to keep them in sync.
+| On-demand context routing | `core/.context/index.md` |
+| Playbook procedures | `playbooks/{category}/{concern}.md` |
+| Skill wrappers (Claude + Copilot) | Generated by `deploy.sh` — do not edit directly |
 
 ## Editing Guidelines
 
 - Do not modify templates unless explicitly asked.
 - Keep standards prescriptive — "must", "never", "always" — not advisory.
 - Every instruction file ends with `## Non-Negotiables` and `## Decision Checklist`.
-- When updating a standard, update it in the canonical source and its skill wrapper.
+- When adding a new standard, add it to `standards/`, create playbooks in `playbooks/`, and add entries to `core/.context/index.md`.

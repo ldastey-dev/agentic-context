@@ -98,138 +98,21 @@ Infrastructure (Database / External APIs / Messaging)
 
 ---
 
-## Workflow Orchestration
+## Context System
 
-### Plan Mode Default
+This repository uses on-demand context loading. Before starting any task, read `.context/index.md` and load files matching the current task's domain.
 
-- Enter plan mode for ANY non-trivial task (3+ steps or architectural decisions).
-- If something goes sideways, STOP and re-plan immediately — don't keep pushing.
-- Use plan mode for verification steps, not just building.
-- Write detailed specs upfront to reduce ambiguity.
+Available context types:
 
-### Subagent Strategy
-
-- Use subagents liberally to keep main context window clean.
-- Offload research, exploration, and parallel analysis to subagents.
-- For complex problems, throw more compute at it via subagents.
-- One task per subagent for focused execution.
-
-### Self-Improvement Loop
-
-- After ANY correction from the user: update `tasks/lessons.md` with the pattern.
-- Write rules for yourself that prevent the same mistake.
-- Ruthlessly iterate until mistake rate drops.
-- Review lessons at session start for the relevant project.
-
-### Verification Before Done
-
-- Never mark a task complete without proving it works.
-- Diff behaviour between main and your changes when relevant.
-- Ask yourself: "Would a staff engineer approve this?"
-- Run tests, check logs, demonstrate correctness.
-
-### Demand Elegance (Balanced)
-
-- For non-trivial changes: pause and ask "is there a more elegant way?"
-- If a fix feels hacky: "Knowing everything I know now, implement the elegant solution."
-- Skip this for simple, obvious fixes — don't over-engineer.
-- Challenge your own work before presenting it.
-
-### Autonomous Bug Fixing
-
-- When given a bug report: just fix it. Don't ask for hand-holding.
-- Point at logs, errors, failing tests — then resolve them.
-- Zero context switching required from the user.
-- Fix failing CI tests without being told how.
-
-### Autonomous Improvement During Review
-
-- When reviewing code or conducting an assessment, if you identify issues: fix them. Do not ask for permission to improve code health.
-- Prioritise coverage and pipeline excellence first — a strong safety net enables all other improvements.
-- Delegate fixes to subagents: construct a focused prompt for each fix, starting with test coverage, then pipeline quality, then the fix itself.
-- Small, focused improvements compound. A review that also adds missing tests and fixes a lint warning leaves the codebase better than it was found.
-
----
-
-## Task Management
-
-1. **Plan First:** Write plan to `tasks/todo.md` with checkable items.
-2. **Verify Plan:** Check in before starting implementation.
-3. **Track Progress:** Mark items complete as you go.
-4. **Explain Changes:** High-level summary at each step.
-5. **Document Results:** Add review section to `tasks/todo.md`.
-6. **Capture Lessons:** Update `tasks/lessons.md` after corrections.
-
----
-
-## Agent Behaviour
-
-### Research and Analysis
-
-- Establish scope and constraints before diving in.
-- Identify primary sources over secondary commentary.
-- Cross-reference claims across multiple sources when possible.
-- Distinguish between facts, consensus, and speculation.
-- Note confidence level: certain, likely, uncertain.
-- Flag when information may be outdated relative to your knowledge cutoff.
-- Define problems clearly before proposing solutions. Consider at least two alternatives.
-
-### Writing Standards
-
-- **Concise over verbose.** Say it in fewer words.
-- **Active voice.** "The team decided" not "It was decided by the team."
-- **Specific over general.** "Latency increased 3x" not "Performance degraded significantly."
-- **British English** unless the context requires otherwise.
-- **No filler.** Cut "In order to" (use "To"), "It should be noted that" (just state it).
-- **Tables over prose** for comparisons, options, and structured data.
-- Lead with the conclusion or recommendation. Detail follows.
-
-### Communication Style
-
-- Direct and to the point. No preamble or postamble.
-- Match the register of the request — technical for technical, plain for plain.
-- If a one-word answer is sufficient, give a one-word answer.
-- Do not repeat the question back. Do not summarise what you are about to do. Just do it.
-- When disagreeing, lead with the evidence.
-
-### Working With Files
-
-- Read before writing — understand existing content and conventions.
-- Follow existing conventions in the target directory (naming, format, structure).
-- No emoji unless explicitly requested.
-- Use markdown with consistent heading hierarchy.
-- Prefer editing existing files over creating new ones.
-- Batch independent operations for efficiency.
-
-### Assessment and Review Workflows
-
-When asked to assess or review an application, codebase, or system:
-
-- **PR-level:** Apply the relevant `standards/*.md` for the change.
-
-Standards file inventory:
-
-| Concern | File |
-| --- | --- |
-| SOLID, DRY, Clean Code, Clean Architecture | `standards/code-quality.md` |
-| Security — OWASP Top 10 | `standards/security.md` |
-| Testing — Test Trophy Model | `standards/testing.md` |
-| CI/CD — Quality Gates & Fast Flow | `standards/ci-cd.md` |
-| Observability — OpenTelemetry | `standards/observability.md` |
-| Resilience & Fault Tolerance | `standards/resilience.md` |
-| Performance & Scalability | `standards/performance.md` |
-| Cost Optimisation | `standards/cost-optimisation.md` |
-| Operational Excellence & IaC | `standards/operational-excellence.md` |
-| API Design | `standards/api-design.md` |
-| AWS Well-Architected (6 pillars) | `standards/aws-well-architected.md` |
-| GDPR Compliance | `standards/gdpr.md` |
-| PCI DSS Compliance | `standards/pci-dss.md` |
+- **Standards** in `.context/standards/` — detailed reference for a specific concern (security, testing, performance, etc.)
+- **Playbooks** in `.context/playbooks/` — step-by-step procedures for assessments, reviews, plans, and refactoring
+- **Conventions** in `.context/conventions/` — workflow, communication, and coding style guidance
 
 ---
 
 ## Mandated Standards
 
-The following standards are non-negotiable. Do not weaken them. Detailed guidance is in `standards/` and auto-loads as Claude skills when relevant.
+The following standards are non-negotiable. Do not weaken them. Detailed guidance is in `.context/standards/`.
 
 ### Core Principles
 
@@ -244,19 +127,23 @@ The following standards are non-negotiable. Do not weaken them. Detailed guidanc
 
 | Standard | Key Rule | Detail |
 | --- | --- | --- |
-| Code Quality | SOLID, DRY, cyclomatic complexity < 10 | `standards/code-quality.md` |
-| Security | OWASP Top 10 compliance | `standards/security.md` |
-| Testing | >= 90% coverage, Test Trophy Model | `standards/testing.md` |
-| CI/CD | 7-stage pipeline, < 10 min full CI | `standards/ci-cd.md` |
-| Observability | OpenTelemetry, structured JSON logging | `standards/observability.md` |
-| Resilience | Circuit breakers, retries with backoff | `standards/resilience.md` |
-| Performance | No N+1, pagination, resource disposal | `standards/performance.md` |
-| Cost | Cache before network, FinOps principles | `standards/cost-optimisation.md` |
-| Operations | IaC, env vars, small focused PRs | `standards/operational-excellence.md` |
-| API Design | OpenAPI 3+, REST, RFC 7807 errors | `standards/api-design.md` |
-| AWS | 6 pillars: OpEx, Security, Reliability, Perf, Cost, Sustainability | `standards/aws-well-architected.md` |
-| GDPR | Lawful basis, data minimisation, subject rights | `standards/gdpr.md` |
-| PCI DSS | CDE scoping, AES-256, TLS 1.2+ | `standards/pci-dss.md` |
+| Code Quality | SOLID, DRY, cyclomatic complexity < 10 | `.context/standards/code-quality.md` |
+| Security | OWASP Top 10 compliance | `.context/standards/security.md` |
+| Testing | >= 90% coverage, Test Trophy Model | `.context/standards/testing.md` |
+| CI/CD | 7-stage pipeline, < 10 min full CI | `.context/standards/ci-cd.md` |
+| Observability | OpenTelemetry, structured JSON logging | `.context/standards/observability.md` |
+| Resilience | Circuit breakers, retries with backoff | `.context/standards/resilience.md` |
+| Performance | No N+1, pagination, resource disposal | `.context/standards/performance.md` |
+| Cost | Cache before network, FinOps principles | `.context/standards/cost-optimisation.md` |
+| Operations | IaC, env vars, small focused PRs | `.context/standards/operational-excellence.md` |
+| API Design | OpenAPI 3+, REST, RFC 7807 errors | `.context/standards/api-design.md` |
+| AWS | 6 pillars: OpEx, Security, Reliability, Perf, Cost, Sustainability | `.context/standards/aws-well-architected.md` |
+| GDPR | Lawful basis, data minimisation, subject rights | `.context/standards/gdpr.md` |
+| PCI DSS | CDE scoping, AES-256, TLS 1.2+ | `.context/standards/pci-dss.md` |
+| Accessibility | WCAG 2.2 AA, keyboard, ARIA, contrast | `.context/standards/accessibility.md` |
+| Architecture | Clean Architecture, dependency direction, layer boundaries | `.context/standards/architecture.md` |
+| IaC | State management, drift detection, container security | `.context/standards/iac.md` |
+| Tech Debt | Debt taxonomy, impact scoring, paydown strategy | `.context/standards/tech-debt.md` |
 
 ---
 

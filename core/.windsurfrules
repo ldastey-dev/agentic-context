@@ -2,3 +2,6 @@
 
 Follow the rules defined in AGENTS.md. That file is the single source of truth
 for all coding standards, architecture decisions, and workflow conventions.
+
+Read `.context/index.md` before starting any task to find relevant standards,
+playbooks, and conventions.

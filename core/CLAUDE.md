@@ -5,17 +5,13 @@
 
 Read and apply `AGENTS.md` for project conventions and workflow rules.
 
-## Standards
+## Context System
 
-Detailed standards are in `standards/` and auto-load as skills when relevant.
-When working in a specific domain (security, testing, performance, etc.),
-the matching standard will be available automatically.
+Before starting any task, read `.context/index.md` and load files matching the current task's domain. Standards, playbooks, and conventions are all available on demand.
 
-## Skills
+## Skills (Claude Code)
 
-Assessment, review, planning, and refactoring skills are available.
-Type `/` to see all available commands, or describe your task and the
-relevant skill will be suggested.
+Assessment, review, planning, and refactoring playbooks are available as Claude Code skills. Type `/` to see all available commands, or describe your task and the relevant skill will be suggested.
 
 ---
 

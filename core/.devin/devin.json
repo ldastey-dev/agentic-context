@@ -1,6 +1,6 @@
 {
   "agent_instructions": "AGENTS.md",
   "repo_notes": {
-    "content": "This repository contains AI agent configuration templates, coding standards, assessment playbooks, and reusable skills. AGENTS.md is the single source of truth for all coding standards — all other agent files delegate to it. Standards files in standards/ provide detailed per-concern guidance. Playbooks in playbooks/ are standalone prompts for assessments, reviews, and planning. Skills in skills/ are reusable procedures. The primary tech stack across target projects is Java, C#/.NET, React, Node.js, and PHP."
+    "content": "This repository uses on-demand context loading. Read .context/index.md before starting any task to find relevant standards, playbooks, and conventions. AGENTS.md is the single source of truth for project conventions — all other agent files delegate to it."
   }
 }
