@@ -16,7 +16,7 @@ Content is organised to minimise always-in-context footprint and load detail on 
 
 ## How Context Loading Works
 
-The `.context/index.md` file is a keyword-to-file routing table. Every agent — Claude Code, Cursor, Copilot, Devin, Cline, Windsurf — is instructed to read this index before starting a task and load files matching the current domain.
+The `.context/index.md` file is a keyword-to-file routing table. Every agent — Claude Code, Cursor, Copilot, Devin, Windsurf — is instructed to read this index before starting a task and load files matching the current domain.
 
 This is the cross-agent mechanism: any LLM-based agent can read a markdown table and match keywords. No proprietary skill system required.
 
@@ -40,7 +40,6 @@ User says: "refactor the authentication module"
 | **Windsurf** | `.windsurfrules` → `AGENTS.md` | Redirect |
 | **Claude Code** | `CLAUDE.md` → `AGENTS.md` + `.claude/skills/` | Delegation + generated skill wrappers |
 | **GitHub Copilot** | `.github/copilot-instructions.md` → `AGENTS.md` | Redirect |
-| **Cline / Roo Code** | `.clinerules` → `AGENTS.md` | Redirect |
 
 `AGENTS.md` is the **single source of truth** for project conventions. All agent config files redirect to it and to `.context/index.md`.
 
