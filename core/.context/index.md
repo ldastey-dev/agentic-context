@@ -41,6 +41,7 @@ Combine multiple matches when a task spans domains.
 | assess observability, monitoring audit, logging assessment | `.context/playbooks/assess/observability.md` | Observability maturity assessment |
 | assess performance, performance audit, scalability review | `.context/playbooks/assess/performance.md` | Performance and resilience assessment |
 | assess security, security audit, threat model, pen test | `.context/playbooks/assess/security.md` | OWASP Top 10 security assessment |
+| assess domain security, DNS audit, subdomain takeover, security headers, HSTS, CSP, WAF, Cloudflare | `.context/playbooks/assess/domain-security.md` | External domain and attack-surface security assessment |
 | assess tech debt, debt inventory, code health | `.context/playbooks/assess/tech-debt.md` | Technical debt identification and prioritisation |
 | assess test coverage, test audit, testing assessment | `.context/playbooks/assess/test-coverage.md` | Testing strategy and coverage assessment |
 

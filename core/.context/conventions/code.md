@@ -6,6 +6,7 @@
 - Follow existing conventions in the target directory (naming, format, structure).
 - No emoji unless explicitly requested.
 - Use markdown with consistent heading hierarchy.
+- In `standards/`, headings must use `## N · Section Title`; in `playbooks/`, headings must be semantic and non-numbered.
 - Prefer editing existing files over creating new ones.
 - Batch independent operations for efficiency.
 

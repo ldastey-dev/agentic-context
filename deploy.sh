@@ -2,91 +2,307 @@
 # deploy.sh — copy agent-contexts templates to a target repository
 #
 # Usage:
-#   ./deploy.sh /path/to/target-repo
+#   ./deploy.sh --agents <claude|copilot|cursor|devin|windsurf|all> [target-repo]
 #
-# This copies:
-#   core/        → target repo root     (always-in-context files + .context/index + conventions)
-#   standards/   → target .context/standards/  (reference standards)
-#   playbooks/   → target .context/playbooks/  (on-demand playbooks)
-#
-# Then generates:
-#   target .claude/skills/  (Claude Code skill wrappers pointing to playbooks)
-#   target .github/skills/  (GitHub Copilot skill wrappers pointing to playbooks)
+# If --agents is omitted in an interactive terminal, an arrow-key multiselect
+# prompt is shown.
 
 set -euo pipefail
 
+VALID_AGENTS=(claude copilot cursor devin windsurf)
+SELECTED_AGENTS=()
+ENABLED_AGENTS=()
+TARGET=""
+AGENTS_FLAG_PROVIDED=0
+
 usage() {
   cat <<EOF
-Usage: ./deploy.sh <target-repo>
+Usage: ./deploy.sh --agents <agent ...|all> [target-repo]
 
 Copy agent-contexts templates to a target repository and generate skill wrappers.
+If [target-repo] is omitted, deploys to the current directory.
 
-This copies:
-  core/        → target repo root     (always-in-context files + .context/index + conventions)
-  standards/   → target .context/standards/  (reference standards)
-  playbooks/   → target .context/playbooks/  (on-demand playbooks)
+Shared content (always copied):
+  AGENTS.md                         → target repo root
+  .context/                         → target .context/ (index + conventions)
+  standards/                        → target .context/standards/
+  playbooks/                        → target .context/playbooks/
 
-Then generates:
-  .claude/skills/  (Claude Code skill wrappers pointing to playbooks)
-  .github/skills/  (GitHub Copilot skill wrappers pointing to playbooks)
-
-Arguments:
-  <target-repo>   Path to the target repository directory
+Agent-specific files (copied only for selected agents):
+  claude     → CLAUDE.md, .claude/settings.json, .claude/skills/
+  copilot    → .github/copilot-instructions.md, .github/skills/
+  cursor     → .cursor/rules/standards.mdc
+  devin      → .devin/devin.json
+  windsurf   → .windsurfrules
+  all        → all of the above
 
 Options:
-  -h, --help      Show this help message and exit
+  --agents   Mandatory in non-interactive mode. Supports one or more values:
+             claude copilot cursor devin windsurf all
+  -h, --help Show this help message and exit
 EOF
 }
 
-if [ $# -eq 0 ]; then
-  usage
-  exit 1
-fi
+print_banner() {
+  local c1=$'\033[38;5;39m'
+  local c2=$'\033[38;5;45m'
+  local c3=$'\033[38;5;51m'
+  local c4=$'\033[38;5;220m'
+  local c_link=$'\033[38;5;81m'
+  local c_name=$'\033[38;5;213m'
+  local reset=$'\033[0m'
+  local repo_url="https://github.com/ldastey-dev/agentic-context"
 
-case "${1:-}" in
-  -h|--help)
-    usage
-    exit 0
-    ;;
-  -*)
-    echo "Error: unknown option '$1'" >&2
-    echo "" >&2
-    usage >&2
+  printf "%b\n" "${c1}         __${reset}"
+  printf "%b\n" "${c2} _(\\\\    |@@|${reset}"
+  printf "%b\n" "${c3}(__/\\\\__ \\\\--/ __${reset}"
+  printf "%b\n" "${c1}   \\\\___|----|  |   __${reset}"
+  printf "%b\n" "${c2}       \\\\ }{ /\\\\ )_ / _\\\\${reset}"
+  printf "%b\n" "${c3}       /\\\\__/\\\\ \\\\__O (__${reset}"
+  printf "%b\n" "${c1}      (--/\\\\--)    \\\\__/${reset}"
+  printf "%b\n" "${c2}      _)(  )(_${reset}"
+  printf "%b\n" "${c3}     \`---''---\`${reset}"
+  printf "%b\n" "${c4}A comprehensive list of engineering standards for context engineering with AI Agents${reset}"
+
+  if [[ -t 1 && "${TERM:-}" != "dumb" ]]; then
+    printf "%b\033]8;;%s\a%s\033]8;;\a%b\n" "$c_link" "$repo_url" "$repo_url" "$reset"
+  else
+    printf "%b%s%b\n" "$c_link" "$repo_url" "$reset"
+  fi
+
+  printf "%b%s%b\n\n" "$c_name" "Written by Leigh Dastey" "$reset"
+}
+
+join_by() {
+  local delimiter="$1"
+  shift
+  local first=1
+  local value
+  for value in "$@"; do
+    if [[ $first -eq 1 ]]; then
+      printf "%s" "$value"
+      first=0
+    else
+      printf "%s%s" "$delimiter" "$value"
+    fi
+  done
+}
+
+agent_enabled() {
+  local sought="$1"
+  local agent
+  for agent in "${ENABLED_AGENTS[@]}"; do
+    if [[ "$agent" == "$sought" ]]; then
+      return 0
+    fi
+  done
+  return 1
+}
+
+copy_file() {
+  local src="$1"
+  local dst="$2"
+  mkdir -p "$(dirname "$dst")"
+  cp "$src" "$dst"
+}
+
+copy_dir_contents() {
+  local src="$1"
+  local dst="$2"
+  mkdir -p "$dst"
+  cp -r "$src/." "$dst/"
+}
+
+interactive_select_agents() {
+  local options=(all "${VALID_AGENTS[@]}" "clear and exit")
+  local options_count=${#options[@]}
+  local exit_index=$((options_count - 1))
+  local -a selected=()
+  local cursor=0
+  local key sequence i
+  local colour_green=$'\033[32m'
+  local colour_reset=$'\033[0m'
+  local status_msg=""
+  local first_render=1
+
+  for ((i=0; i<options_count; i++)); do
+    selected[$i]=0
+  done
+
+  render_menu() {
+    local idx pointer marker label line
+
+    if [[ $first_render -eq 0 ]]; then
+      printf "\033[%dA" "$((options_count + 1))"
+    fi
+
+    for idx in "${!options[@]}"; do
+      pointer="  "
+      marker="[ ]"
+      label="${options[$idx]}"
+      [[ $idx -eq $cursor ]] && pointer="> "
+
+      if [[ ${selected[$idx]} -eq 1 ]]; then
+        marker="[x]"
+      fi
+
+      line=$(printf "%s%s %s" "$pointer" "$marker" "$label")
+      if [[ $idx -eq $cursor ]]; then
+        printf "\r\033[2K%b%s%b\n" "$colour_green" "$line" "$colour_reset"
+      else
+        printf "\r\033[2K%s\n" "$line"
+      fi
+    done
+
+    printf "\r\033[2K%s\n" "$status_msg"
+    first_render=0
+  }
+
+  restore_cursor() {
+    printf "\033[?25h"
+  }
+
+  printf "\033[?25l"
+
+  echo "Select one or more agents (space to toggle, ↑/↓ to move, Enter to confirm)."
+  echo "Select 'all' to deploy every supported agent."
+  echo "Select 'clear and exit' to clear selection and quit."
+  echo
+
+  render_menu
+
+  while true; do
+    key=""
+    sequence=""
+    IFS= read -rsn1 key || true
+
+    if [[ "$key" == $'\x1b' ]]; then
+      IFS= read -rsn2 -t 0.1 sequence || true
+      key+="$sequence"
+      case "$key" in
+        $'\x1b[A') cursor=$(( (cursor - 1 + options_count) % options_count )) ;;
+        $'\x1b[B') cursor=$(( (cursor + 1) % options_count )) ;;
+      esac
+      status_msg=""
+      render_menu
+      continue
+    fi
+
+    case "$key" in
+      " ")
+        if [[ $cursor -eq $exit_index ]]; then
+          if [[ ${selected[$cursor]} -eq 1 ]]; then
+            selected[$cursor]=0
+            status_msg=""
+          else
+            for i in "${!selected[@]}"; do
+              selected[$i]=0
+            done
+            selected[$cursor]=1
+            status_msg="Press Enter to clear selections and exit."
+          fi
+        elif [[ "${options[$cursor]}" == "all" ]]; then
+          if [[ ${selected[$cursor]} -eq 1 ]]; then
+            for ((i=0; i<exit_index; i++)); do
+              selected[$i]=0
+            done
+          else
+            for ((i=0; i<exit_index; i++)); do
+              selected[$i]=1
+            done
+          fi
+          selected[$exit_index]=0
+          status_msg=""
+        else
+          if [[ ${selected[$cursor]} -eq 1 ]]; then
+            selected[$cursor]=0
+          else
+            selected[$cursor]=1
+          fi
+
+          selected[$exit_index]=0
+          selected[0]=1
+          for ((i=1; i<exit_index; i++)); do
+            if [[ ${selected[$i]} -eq 0 ]]; then
+              selected[0]=0
+              break
+            fi
+          done
+
+          status_msg=""
+        fi
+        render_menu
+        ;;
+      $'\n'|$'\r'|"")
+        if [[ $cursor -eq $exit_index ]]; then
+          for i in "${!selected[@]}"; do
+            selected[$i]=0
+          done
+          SELECTED_AGENTS=()
+          status_msg=""
+          render_menu
+          restore_cursor
+          echo "Selection cleared. Exiting."
+          return 2
+        fi
+
+        local chosen=()
+        for i in "${!options[@]}"; do
+          if [[ $i -eq $exit_index ]]; then
+            continue
+          fi
+          if [[ ${selected[$i]} -eq 1 ]]; then
+            chosen+=("${options[$i]}")
+          fi
+        done
+
+        if [[ ${#chosen[@]} -eq 0 ]]; then
+          status_msg="Select at least one option."
+          render_menu
+          continue
+        fi
+
+        SELECTED_AGENTS=("${chosen[@]}")
+        restore_cursor
+        return 0
+        ;;
+      *)
+        status_msg=""
+        render_menu
+        ;;
+    esac
+  done
+}
+
+normalise_agents() {
+  local -A seen=()
+  local agent
+
+  for agent in "${SELECTED_AGENTS[@]}"; do
+    case "$agent" in
+      all)
+        ENABLED_AGENTS=("${VALID_AGENTS[@]}")
+        return 0
+        ;;
+      claude|copilot|cursor|devin|windsurf)
+        if [[ -z "${seen[$agent]+x}" ]]; then
+          ENABLED_AGENTS+=("$agent")
+          seen[$agent]=1
+        fi
+        ;;
+      *)
+        echo "Error: unsupported agent '$agent'." >&2
+        echo "Supported agents: all, $(join_by ', ' "${VALID_AGENTS[@]}")" >&2
+        exit 1
+        ;;
+    esac
+  done
+
+  if [[ ${#ENABLED_AGENTS[@]} -eq 0 ]]; then
+    echo "Error: at least one agent must be selected." >&2
     exit 1
-    ;;
-esac
-
-TARGET="$1"
-
-if [ ! -d "$TARGET" ]; then
-  echo "Error: '$TARGET' is not a directory" >&2
-  exit 1
-fi
-
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-
-echo "Deploying agent-contexts to $TARGET"
-
-# Tier 1: always-in-context files → repo root
-echo "  Copying core/ → $TARGET/"
-cp -r "$SCRIPT_DIR/core/." "$TARGET/"
-
-# Standards → .context/standards/
-echo "  Copying standards/ → $TARGET/.context/standards/"
-mkdir -p "$TARGET/.context/standards"
-cp -r "$SCRIPT_DIR/standards/." "$TARGET/.context/standards/"
-
-# Playbooks → .context/playbooks/
-echo "  Copying playbooks/ → $TARGET/.context/playbooks/"
-mkdir -p "$TARGET/.context/playbooks"
-cp -r "$SCRIPT_DIR/playbooks/." "$TARGET/.context/playbooks/"
-
-# Generate skill wrappers from playbooks for agents with native skill systems
-echo "  Generating skill wrappers from playbooks..."
-echo "    → .claude/skills/ (Claude Code)"
-echo "    → .github/skills/ (GitHub Copilot)"
-mkdir -p "$TARGET/.claude/skills"
-mkdir -p "$TARGET/.github/skills"
+  fi
+}
 
 generate_skill() {
   local playbook_path="$1"
@@ -94,19 +310,18 @@ generate_skill() {
   local rel_path="$3"
   local allowed_tools="${4:-}"
 
-  # Extract frontmatter fields
   local name description
   name=$(sed -n 's/^name: *//p' "$playbook_path" | head -1)
   description=$(sed -n 's/^description: *//p' "$playbook_path" | head -1 | sed 's/^"//;s/"$//')
 
-  if [ -z "$name" ] || [ -z "$description" ]; then
+  if [[ -z "$name" || -z "$description" ]]; then
     return
   fi
 
   local skill_dir="$target_dir/$name"
   mkdir -p "$skill_dir"
 
-  if [ -n "$allowed_tools" ]; then
+  if [[ -n "$allowed_tools" ]]; then
     cat > "$skill_dir/SKILL.md" << SKILL_EOF
 ---
 name: $name
@@ -128,38 +343,195 @@ SKILL_EOF
   fi
 }
 
-generate_skills_for_all_agents() {
+generate_skills_for_selected_agents() {
   local playbook_path="$1"
   local rel_path="$2"
   local allowed_tools="${3:-Read, Grep, Glob, Bash(git *), Write, Edit, Agent}"
 
-  generate_skill "$playbook_path" "$TARGET/.claude/skills" "$rel_path" "$allowed_tools"
-  generate_skill "$playbook_path" "$TARGET/.github/skills" "$rel_path" ""
+  if agent_enabled claude; then
+    generate_skill "$playbook_path" "$TARGET/.claude/skills" "$rel_path" "$allowed_tools"
+  fi
+  if agent_enabled copilot; then
+    generate_skill "$playbook_path" "$TARGET/.github/skills" "$rel_path" ""
+  fi
 }
 
-for playbook in "$SCRIPT_DIR"/playbooks/assess/*.md; do
-  filename=$(basename "$playbook")
-  generate_skills_for_all_agents "$playbook" "assess/$filename"
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    --agents)
+      if [[ $AGENTS_FLAG_PROVIDED -eq 1 ]]; then
+        echo "Error: --agents provided more than once." >&2
+        exit 1
+      fi
+      AGENTS_FLAG_PROVIDED=1
+      shift
+
+      while [[ $# -gt 0 ]]; do
+        case "$1" in
+          all|claude|copilot|cursor|devin|windsurf)
+            SELECTED_AGENTS+=("$1")
+            shift
+            ;;
+          --*)
+            break
+            ;;
+          *)
+            break
+            ;;
+        esac
+      done
+
+      if [[ ${#SELECTED_AGENTS[@]} -eq 0 ]]; then
+        echo "Error: --agents requires at least one value." >&2
+        usage >&2
+        exit 1
+      fi
+      ;;
+    --*)
+      echo "Error: unknown option '$1'" >&2
+      echo "" >&2
+      usage >&2
+      exit 1
+      ;;
+    *)
+      if [[ -z "$TARGET" ]]; then
+        TARGET="$1"
+      else
+        echo "Error: unexpected argument '$1'" >&2
+        usage >&2
+        exit 1
+      fi
+      shift
+      ;;
+  esac
 done
 
-for playbook in "$SCRIPT_DIR"/playbooks/review/*.md; do
-  filename=$(basename "$playbook")
-  # Review playbooks get read-only tools for Claude Code
-  generate_skills_for_all_agents "$playbook" "review/$filename" "Read, Grep, Glob, Bash(git *)"
-done
+print_banner
 
-for playbook in "$SCRIPT_DIR"/playbooks/plan/*.md; do
-  filename=$(basename "$playbook")
-  generate_skills_for_all_agents "$playbook" "plan/$filename"
-done
+if [[ $AGENTS_FLAG_PROVIDED -eq 0 ]]; then
+  if [[ -t 0 && -t 1 ]]; then
+    if interactive_select_agents; then
+      :
+    else
+      selector_status=$?
+      if [[ $selector_status -eq 2 ]]; then
+        exit 0
+      fi
+      exit "$selector_status"
+    fi
+  else
+    echo "Error: --agents is mandatory in non-interactive mode." >&2
+    usage >&2
+    exit 1
+  fi
+fi
 
-for playbook in "$SCRIPT_DIR"/playbooks/refactor/*.md; do
-  filename=$(basename "$playbook")
-  generate_skills_for_all_agents "$playbook" "refactor/$filename"
-done
+normalise_agents
+
+if [[ -z "$TARGET" ]]; then
+  TARGET="."
+fi
+
+if [[ ! -d "$TARGET" ]]; then
+  echo "Error: '$TARGET' is not a directory" >&2
+  exit 1
+fi
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+echo "Deploying agent-contexts to $TARGET"
+echo "  Selected agents: $(join_by ', ' "${ENABLED_AGENTS[@]}")"
+
+echo "  Copying shared context files..."
+copy_file "$SCRIPT_DIR/core/AGENTS.md" "$TARGET/AGENTS.md"
+copy_dir_contents "$SCRIPT_DIR/core/.context" "$TARGET/.context"
+
+if agent_enabled claude; then
+  echo "  Copying Claude Code files..."
+  copy_file "$SCRIPT_DIR/core/CLAUDE.md" "$TARGET/CLAUDE.md"
+  copy_file "$SCRIPT_DIR/core/.claude/settings.json" "$TARGET/.claude/settings.json"
+fi
+
+if agent_enabled copilot; then
+  echo "  Copying GitHub Copilot files..."
+  copy_file "$SCRIPT_DIR/core/.github/copilot-instructions.md" "$TARGET/.github/copilot-instructions.md"
+fi
+
+if agent_enabled cursor; then
+  echo "  Copying Cursor files..."
+  copy_file "$SCRIPT_DIR/core/.cursor/rules/standards.mdc" "$TARGET/.cursor/rules/standards.mdc"
+fi
+
+if agent_enabled devin; then
+  echo "  Copying Devin files..."
+  copy_file "$SCRIPT_DIR/core/.devin/devin.json" "$TARGET/.devin/devin.json"
+fi
+
+if agent_enabled windsurf; then
+  echo "  Copying Windsurf files..."
+  copy_file "$SCRIPT_DIR/core/.windsurfrules" "$TARGET/.windsurfrules"
+fi
+
+echo "  Copying standards/ → $TARGET/.context/standards/"
+copy_dir_contents "$SCRIPT_DIR/standards" "$TARGET/.context/standards"
+
+echo "  Copying playbooks/ → $TARGET/.context/playbooks/"
+copy_dir_contents "$SCRIPT_DIR/playbooks" "$TARGET/.context/playbooks"
+
+if agent_enabled claude || agent_enabled copilot; then
+  echo "  Generating skill wrappers from playbooks..."
+  if agent_enabled claude; then
+    echo "    → .claude/skills/ (Claude Code)"
+    mkdir -p "$TARGET/.claude/skills"
+  fi
+  if agent_enabled copilot; then
+    echo "    → .github/skills/ (GitHub Copilot)"
+    mkdir -p "$TARGET/.github/skills"
+  fi
+
+  for playbook in "$SCRIPT_DIR"/playbooks/assess/*.md; do
+    filename=$(basename "$playbook")
+    generate_skills_for_selected_agents "$playbook" "assess/$filename"
+  done
+
+  for playbook in "$SCRIPT_DIR"/playbooks/review/*.md; do
+    filename=$(basename "$playbook")
+    # Review playbooks get read-only tools for Claude Code
+    generate_skills_for_selected_agents "$playbook" "review/$filename" "Read, Grep, Glob, Bash(git *)"
+  done
+
+  for playbook in "$SCRIPT_DIR"/playbooks/plan/*.md; do
+    filename=$(basename "$playbook")
+    generate_skills_for_selected_agents "$playbook" "plan/$filename"
+  done
+
+  for playbook in "$SCRIPT_DIR"/playbooks/refactor/*.md; do
+    filename=$(basename "$playbook")
+    generate_skills_for_selected_agents "$playbook" "refactor/$filename"
+  done
+else
+  echo "  Skipping skill wrapper generation (no selected agent uses skills)."
+fi
 
 echo ""
 echo "Done. Next steps:"
-echo "  1. Fill in [CONFIGURE] sections in $TARGET/AGENTS.md"
-echo "  2. Fill in [CONFIGURE] sections in $TARGET/CLAUDE.md"
-echo "  3. Review $TARGET/.claude/settings.json and adjust permissions/hooks"
+step=1
+next_step() {
+  echo "  $step. $1"
+  step=$((step + 1))
+}
+
+next_step "Fill in [CONFIGURE] sections in $TARGET/AGENTS.md"
+
+if agent_enabled claude; then
+  next_step "Fill in [CONFIGURE] sections in $TARGET/CLAUDE.md"
+  next_step "Review $TARGET/.claude/settings.json and adjust permissions/hooks"
+fi
+
+if agent_enabled copilot; then
+  next_step "Review $TARGET/.github/copilot-instructions.md"
+fi
