@@ -392,6 +392,134 @@ X-RateLimit-Reset: 1705312800
 
 ---
 
+## OpenAPI Specification Structure
+
+### Spec Metadata
+
+- `info.title` must be descriptive and identify the product or service — not
+  just "API".
+- `info.version` must reflect the API version, not the spec document version.
+- `info.description` must provide a meaningful overview of the API's purpose
+  and intended audience.
+- `info.contact` must include a team name or email for API consumers to raise
+  issues.
+- `info.license` must be populated for externally exposed APIs.
+
+### Servers
+
+- The `servers` array must be populated with all applicable base URLs
+  (development, staging, production).
+- Server URLs must not include trailing slashes.
+- Server descriptions must clarify the environment.
+- Server variables must be used where the URL contains environment-specific
+  components.
+
+### Tags
+
+- Tags must be defined at the top level (`tags:`) with descriptions.
+- All operations must be tagged.
+- Tags must group operations by resource or capability, not by HTTP method.
+- Tag names must be consistent with resource naming used in paths and schemas.
+
+### Operation IDs
+
+- Every operation must have an `operationId`.
+- `operationId` values must be unique across the entire spec.
+- `operationId` must follow a consistent naming convention (e.g., `GetOrder`,
+  `CreateOrder`, `DeleteOrder`).
+- Auto-generated operation IDs (e.g., `OrdersGet_1`) are never acceptable —
+  always provide meaningful names.
+
+---
+
+## Schema Constraints
+
+### Type Precision
+
+- All schema properties must have an explicit `type` defined.
+- `nullable` must be explicit: use `nullable: true` (OAS 3.0) or
+  `type: ['string', 'null']` (OAS 3.1).
+- `format` must be specified where applicable: `int32`, `int64`, `date`,
+  `date-time`, `uuid`, `email`, `uri`.
+- `string` fields with a fixed set of values must use `enum`.
+- Monetary values must be `string` or `number` with precision documented —
+  never `float` or `double`.
+
+### Constraints and Validation
+
+- `minLength` and `maxLength` must be set on string properties where applicable.
+- `minimum` and `maximum` must be set on numeric properties where applicable.
+- `pattern` must be used for structured strings not covered by built-in formats.
+- The `required` array must be present on objects where properties must be
+  provided.
+
+### Read/Write Direction
+
+- `readOnly: true` must be set on server-generated properties (`id`,
+  `createdAt`, `updatedAt`).
+- `writeOnly: true` must be set on request-only properties (e.g., `password`,
+  `secret`).
+- Clients must not send `readOnly` properties; servers must not return
+  `writeOnly` properties.
+
+### Request Body Schemas
+
+- Request body schemas must use `$ref` to a component schema — avoid defining
+  schemas inline.
+- `PATCH` operations must define a partial schema where all properties are
+  optional — never reuse the `PUT` schema.
+- `required: true` must be set on request bodies that are mandatory.
+- Content type must be specified explicitly (`application/json`).
+
+---
+
+## Component Reusability
+
+- Schemas used in more than one place must be defined in `components/schemas`
+  and referenced via `$ref`.
+- Common parameters (pagination, tenant ID, correlation ID) must be in
+  `components/parameters`.
+- Common responses (Problem Details, paginated response wrapper) must be in
+  `components/responses`.
+- Common headers must be in `components/headers`.
+- Inline schemas are only acceptable for one-off definitions with no reuse
+  potential.
+- Circular `$ref` references must be avoided unless the toolchain explicitly
+  supports them.
+- All `$ref` references must resolve without errors.
+
+---
+
+## API Tooling
+
+### Linting
+
+- The OpenAPI spec must pass a Spectral (or equivalent) linter with no errors.
+- The Spectral ruleset must be configured and committed to the repository.
+- Linting must run in CI on pull requests and fail the build on errors.
+
+### Code-First Generation
+
+When using code-first generation (Swashbuckle, NSwag, or equivalent):
+
+- XML documentation must be enabled and surfaced in the generated spec.
+- Response type attributes (e.g., `[ProducesResponseType]`) must be complete on
+  all actions.
+- The generated spec must be reviewed as a first-class artefact — never treated
+  as disposable auto-output.
+- Schema filters must handle Problem Details, enums, and nullable types
+  correctly.
+
+### Breaking Change Detection
+
+- An API diff tool (`oasdiff`, `openapi-diff`, or equivalent) must run in CI.
+- Breaking change detection must fail the build unless the API version has been
+  incremented.
+- Breaking changes must be explicitly acknowledged and communicated to API
+  consumers.
+
+---
+
 ## Decision Checklist
 
 Before merging any PR that adds or modifies an API endpoint, confirm:
@@ -414,6 +542,13 @@ Before merging any PR that adds or modifies an API endpoint, confirm:
 - [ ] Idempotency key supported for any new POST endpoint
 - [ ] ETag and If-Match supported for update operations
 - [ ] HATEOAS links present in the response (self, related, actions)
+- [ ] `operationId` set on every operation with unique, meaningful names
+- [ ] Schema constraints complete (`readOnly`, `writeOnly`, `minLength`, `maxLength`, `required`)
+- [ ] `nullable` handling correct for the OAS version (3.0 vs 3.1)
+- [ ] Reusable schemas extracted to `components/` — no inline duplication
+- [ ] `PATCH` schemas define all properties as optional (separate from `PUT`)
+- [ ] Spectral linter passes with no errors
+- [ ] API diff tool run for breaking change detection
 
 ---
 
@@ -437,3 +572,7 @@ Before merging any PR that adds or modifies an API endpoint, confirm:
   incident waiting to happen.
 - **Breaking changes require a major version increment.** Removing fields, renaming
   fields, or changing types in an existing version is never acceptable.
+- **`operationId` on every operation.** Auto-generated names like `OrdersGet_1`
+  are never acceptable. Every operation must have a meaningful, unique identifier.
+- **Spectral linting must pass in CI.** No OpenAPI specification merges without
+  a clean linter run. The ruleset is committed to the repository.

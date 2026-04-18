@@ -24,6 +24,16 @@ Combine multiple matches when a task spans domains.
 | GDPR, data protection, privacy, consent, subject rights | `.context/standards/gdpr.md` | Lawful basis, data minimisation, subject rights |
 | PCI, DSS, payment, cardholder, card data | `.context/standards/pci-dss.md` | CDE scoping, AES-256, TLS 1.2+ |
 | accessibility, a11y, WCAG, ARIA, screen reader, keyboard | `.context/standards/accessibility.md` | WCAG 2.2 AA, keyboard, ARIA, contrast |
+| architecture, clean architecture, layers, dependency direction, domain | `.context/standards/architecture.md` | Clean Architecture, layer boundaries, dependency inversion |
+| IaC, infrastructure as code, Terraform, state, drift, containers | `.context/standards/iac.md` | IaC coverage, state management, containerisation, policy-as-code |
+| tech debt, technical debt, code health, refactoring priority | `.context/standards/tech-debt.md` | Debt taxonomy, impact scoring, paydown strategy |
+| .NET, C#, ASP.NET, Entity Framework, EF Core | `.context/standards/dotnet.md` | C#, ASP.NET Core, EF Core, async patterns |
+| React, hooks, components, JSX, state management | `.context/standards/react.md` | Component architecture, hooks, Testing Library |
+| SQL, MSSQL, database, schema, migration, stored proc | `.context/standards/mssql.md` | Schema design, migrations, Azure SQL |
+| PowerShell, PS, script, Az module, Pester | `.context/standards/powershell.md` | Verb-Noun, parameters, Pester, Az module |
+| Terraform, HCL, tfstate, module, provider | `.context/standards/terraform.md` | File layout, modules, tflint, Terratest |
+| ADO, Azure DevOps, pipeline, YAML pipeline | `.context/standards/ado-pipelines.md` | Triggers, templates, environments, approvals |
+| Docker, Dockerfile, container, image, compose | `.context/standards/docker.md` | Multi-stage builds, layer optimisation, scanning |
 
 ---
 

@@ -123,7 +123,7 @@ The following standards are non-negotiable. Do not weaken them. Detailed guidanc
 - **Test What You Change:** If you modify behaviour, prove it works. If you refactor, prove nothing broke.
 - **Evidence Over Opinion:** Reference specific code, config, or behaviour. No vague assertions.
 
-### Standards Reference
+### Domain Standards
 
 | Standard | Key Rule | Detail |
 | --- | --- | --- |
@@ -144,6 +144,18 @@ The following standards are non-negotiable. Do not weaken them. Detailed guidanc
 | Architecture | Clean Architecture, dependency direction, layer boundaries | `.context/standards/architecture.md` |
 | IaC | State management, drift detection, container security | `.context/standards/iac.md` |
 | Tech Debt | Debt taxonomy, impact scoring, paydown strategy | `.context/standards/tech-debt.md` |
+
+### Technology Standards
+
+| Standard | Key Rule | Detail |
+| --- | --- | --- |
+| .NET | C#, ASP.NET Core, EF Core, async patterns | `.context/standards/dotnet.md` |
+| React | Component architecture, hooks, Testing Library | `.context/standards/react.md` |
+| SQL Server | Schema design, migrations, Azure SQL | `.context/standards/mssql.md` |
+| PowerShell | Verb-Noun, parameters, Pester, Az module | `.context/standards/powershell.md` |
+| Terraform | File layout, modules, tflint, Terratest | `.context/standards/terraform.md` |
+| ADO Pipelines | Triggers, templates, environments, approvals | `.context/standards/ado-pipelines.md` |
+| Docker | Multi-stage builds, layer optimisation, scanning | `.context/standards/docker.md` |
 
 ---
 
