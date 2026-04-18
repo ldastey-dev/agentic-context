@@ -102,6 +102,16 @@ standards/                              Tier 3 — reference (→ target .contex
   gdpr.md                               GDPR data protection standards
   pci-dss.md                            PCI DSS payment card data standards
   accessibility.md                      WCAG 2.2 Level AA accessibility standards
+  architecture.md                       Clean Architecture, dependency direction, layers
+  iac.md                                Infrastructure as Code, state, containers, policy
+  tech-debt.md                          Debt taxonomy, impact scoring, paydown strategy
+  dotnet.md                             C#, ASP.NET Core, EF Core, async patterns
+  react.md                              Component architecture, hooks, Testing Library
+  mssql.md                              Schema design, queries, migrations, Azure SQL
+  powershell.md                         Verb-Noun, parameters, Pester, Az module
+  terraform.md                          HCL file layout, modules, tflint, Terratest
+  ado-pipelines.md                      YAML triggers, templates, environments, approvals
+  docker.md                             Multi-stage builds, layer optimisation, scanning
 
 playbooks/                              Tier 2 — on demand (→ target .context/playbooks/)
   assess/                               Structured codebase-level assessments (12)
