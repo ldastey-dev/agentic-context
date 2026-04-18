@@ -4,27 +4,10 @@
       "Read",
       "Glob",
       "Grep",
-      "Bash(npm *)",
-      "Bash(npx *)",
-      "Bash(dotnet *)",
-      "Bash(git *)",
       "Skill"
     ],
     "deny": [
       "Bash(rm -rf *)"
-    ]
-  },
-  "hooks": {
-    "PostToolUse": [
-      {
-        "matcher": "Edit|Write",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "echo '[CONFIGURE] Add your formatter command here, e.g.: npx prettier --write \"$FILE_PATH\"'"
-          }
-        ]
-      }
     ]
   }
 }
