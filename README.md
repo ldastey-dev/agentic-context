@@ -67,6 +67,42 @@ Examples:
 
 Then fill in all `[CONFIGURE]` sections in `AGENTS.md` and any selected agent-specific files (for example `CLAUDE.md` when Claude is selected).
 
+## Versioning & Updates
+
+Each release of this repository has a semver version (see the root `VERSION` file). When you deploy, `deploy.sh` writes a lockfile at `<target>/.agentic-context.lock` that records every installed file, its SHA-256, its ownership, and the template version. Commit this lockfile alongside the deployed content — it is what makes subsequent updates safe.
+
+### File ownership
+
+Every deployed file has one of two ownerships:
+
+| Ownership | Meaning | Examples |
+| --------- | ------- | -------- |
+| `template` | The agentic-context repo owns the content. Auto-refreshed on update if the target copy is pristine. | `.context/standards/*.md`, `.context/playbooks/*.md`, `.windsurfrules`, generated `.claude/skills/*` |
+| `configure` | The target repo owns the content (project-specific `[CONFIGURE]` sections or permissions). Written once on init; **never** overwritten on update. | `AGENTS.md`, `CLAUDE.md`, `.claude/settings.json` |
+
+### Refreshing a deployment
+
+```bash
+# Pull the latest agentic-context, then:
+./deploy.sh update /path/to/target-repo
+```
+
+The update command:
+
+1. Reads the existing lockfile to learn what was installed and at what hashes.
+2. For each template-owned file:
+   - **Pristine** (local hash matches lockfile): silently replaced with the new upstream version.
+   - **Locally modified** (hash diverges): skipped, reported for manual merge. Your edits are preserved.
+3. Configure-owned files are never touched.
+4. Newly added upstream files are copied in.
+5. The lockfile is rewritten with the new version and hashes.
+
+To accept the upstream version of a file you previously edited, delete the local file and re-run `update`. To keep your edits forever, do nothing — each subsequent update will continue to skip it until the content matches upstream again.
+
+### Roadmap: MCP server
+
+The copy-based deploy is the right model today for cross-agent compatibility — any LLM can read markdown from disk. But as MCP adoption matures across agents, an optional MCP server will let you serve standards and playbooks from a single live source of truth rather than N copies. See [`mcp-server/README.md`](mcp-server/README.md) for the planned architecture. The deploy path will remain as a fallback for agents that do not speak MCP.
+
 ## Repository Structure
 
 ```text
