@@ -171,7 +171,7 @@ interactive_select_agents() {
   local exit_index=$((options_count - 1))
   local -a selected=()
   local cursor=0
-  local key sequence i
+  local key seq1 seq2 i
   local colour_green=$'\033[32m'
   local colour_reset=$'\033[0m'
   local status_msg=""
@@ -229,8 +229,13 @@ interactive_select_agents() {
     IFS= read -rsn1 key || true
 
     if [[ "$key" == $'\x1b' ]]; then
-      IFS= read -rsn2 -t 0.1 sequence || true
-      key+="$sequence"
+      IFS= read -rsn1 -t 1 seq1 || true
+      if [[ "$seq1" == "[" ]]; then
+        IFS= read -rsn1 -t 1 seq2 || true
+        key+="$seq1$seq2"
+      else
+        key+="$seq1"
+      fi
       case "$key" in
         $'\x1b[A') cursor=$(( (cursor - 1 + options_count) % options_count )) ;;
         $'\x1b[B') cursor=$(( (cursor + 1) % options_count )) ;;
