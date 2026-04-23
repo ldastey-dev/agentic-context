@@ -19,33 +19,68 @@ OVERWRITE_FLAG=0
 NO_OVERWRITE_FLAG=0
 SKIPPED_FILES=()
 
+# Deploy mode + versioning state
+DEPLOY_MODE="init"      # "init" | "update"
+SOURCE_VERSION=""
+LOCKFILE_NAME=".agentic-context.lock"
+
+# Lockfile state (parallel arrays, keyed by index)
+LOCK_PATHS=()
+LOCK_OWNERSHIP=()
+LOCK_HASHES=()
+PREV_LOCK_AGENTS=""     # comma-separated; populated on update from existing lockfile
+
+# Update-mode reporting
+UPDATED_FILES=()
+NEW_FILES=()
+PRESERVED_CONFIGURE_FILES=()
+MODIFIED_TEMPLATE_FILES=()
+ORPHANED_FILES=()
+
 usage() {
   cat <<EOF
-Usage: ./deploy.sh --agents <agent ...|all> [target-repo]
+Usage:
+  ./deploy.sh --agents <agent ...|all> [target-repo]   # init (first-time deploy)
+  ./deploy.sh update [target-repo]                     # refresh from the template
+  ./deploy.sh --help
 
-Copy agent-contexts templates to a target repository and generate skill wrappers.
-If [target-repo] is omitted, deploys to the current directory.
+Init: copies agent-contexts templates to a target repository and generates skill
+wrappers. Writes a lockfile ($LOCKFILE_NAME) that records every deployed file
+and its template version.
+
+Update: reads the existing lockfile, refreshes template-owned files that have
+not been modified locally, and leaves project-owned files (AGENTS.md, CLAUDE.md,
+.claude/settings.json) untouched. If a template file has been edited locally,
+the update skips it and reports it for manual merge.
+
+Ownership model:
+  template    — the agentic-context repo owns these files. Safe to auto-update
+                when the local copy has not diverged from the last install.
+  configure   — the target repo owns these files. Written once on init; never
+                overwritten on update.
 
 Shared content (always copied):
-  AGENTS.md                         → target repo root
-  .context/                         → target .context/ (index + conventions)
-  standards/                        → target .context/standards/
-  playbooks/                        → target .context/playbooks/
+  AGENTS.md                         → target repo root          (configure)
+  .context/                         → target .context/           (template)
+  standards/                        → target .context/standards/ (template)
+  playbooks/                        → target .context/playbooks/ (template)
 
 Agent-specific files (copied only for selected agents):
-  claude     → CLAUDE.md, .claude/settings.json, .claude/skills/
-  copilot    → .github/copilot-instructions.md, .github/skills/
-  cursor     → .cursor/rules/standards.mdc
-  devin      → .devin/devin.json
-  windsurf   → .windsurfrules
+  claude     → CLAUDE.md (configure), .claude/settings.json (configure),
+               .claude/skills/ (template)
+  copilot    → .github/copilot-instructions.md (template), .github/skills/ (template)
+  cursor     → .cursor/rules/standards.mdc (template)
+  devin      → .devin/devin.json (template)
+  windsurf   → .windsurfrules (template)
   all        → all of the above
 
 Options:
-  --agents   Mandatory in non-interactive mode. Supports one or more values:
+  --agents   Mandatory in non-interactive init mode. Supports one or more values:
              claude copilot cursor devin windsurf all
-  --overwrite    Overwrite all existing files without prompting
-  --no-overwrite Skip all existing files without prompting
-                 Default: prompt per-file when conflicts are detected
+             In update mode, defaults to the set recorded in the lockfile.
+  --overwrite    (init only) Overwrite all existing files without prompting
+  --no-overwrite (init only) Skip all existing files without prompting
+                 Default in init: prompt per-file when conflicts are detected
   -h, --help Show this help message and exit
 EOF
 }
@@ -93,6 +128,120 @@ join_by() {
       printf "%s%s" "$delimiter" "$value"
     fi
   done
+}
+
+read_source_version() {
+  local version_file="$SCRIPT_DIR/VERSION"
+  if [[ -f "$version_file" ]]; then
+    SOURCE_VERSION="$(head -n 1 "$version_file" | tr -d '[:space:]')"
+  fi
+  if [[ -z "$SOURCE_VERSION" ]]; then
+    SOURCE_VERSION="0.0.0-unknown"
+  fi
+}
+
+compute_hash() {
+  local path="$1"
+  if [[ ! -f "$path" ]]; then
+    echo ""
+    return
+  fi
+  if command -v sha256sum >/dev/null 2>&1; then
+    sha256sum "$path" | awk '{print $1}'
+  else
+    shasum -a 256 "$path" | awk '{print $1}'
+  fi
+}
+
+ownership_for() {
+  # Project-owned files: written once on init, never auto-updated.
+  # Every other deployed file is template-owned.
+  case "$1" in
+    AGENTS.md|CLAUDE.md|.claude/settings.json) echo "configure" ;;
+    *) echo "template" ;;
+  esac
+}
+
+lockfile_find_index() {
+  local path="$1" i
+  for i in "${!LOCK_PATHS[@]}"; do
+    if [[ "${LOCK_PATHS[$i]}" == "$path" ]]; then
+      echo "$i"
+      return
+    fi
+  done
+  echo "-1"
+}
+
+lockfile_upsert() {
+  local path="$1" ownership="$2" hash="$3"
+  local i
+  i="$(lockfile_find_index "$path")"
+  if [[ "$i" != "-1" ]]; then
+    LOCK_OWNERSHIP[$i]="$ownership"
+    LOCK_HASHES[$i]="$hash"
+  else
+    LOCK_PATHS+=("$path")
+    LOCK_OWNERSHIP+=("$ownership")
+    LOCK_HASHES+=("$hash")
+  fi
+}
+
+lockfile_get_hash() {
+  local path="$1" i
+  i="$(lockfile_find_index "$path")"
+  if [[ "$i" != "-1" ]]; then
+    echo "${LOCK_HASHES[$i]}"
+  fi
+}
+
+read_existing_lockfile() {
+  local lockfile_path="$TARGET/$LOCKFILE_NAME"
+  if [[ ! -f "$lockfile_path" ]]; then
+    return 1
+  fi
+  local line key rest ownership hash path
+  while IFS= read -r line; do
+    case "$line" in
+      ''|'#'*) continue ;;
+    esac
+    key="${line%% *}"
+    rest="${line#* }"
+    case "$key" in
+      agents)
+        PREV_LOCK_AGENTS="$rest"
+        ;;
+      file)
+        # Format: file <ownership> <hash> <path>
+        ownership="${rest%% *}"
+        rest="${rest#* }"
+        hash="${rest%% *}"
+        path="${rest#* }"
+        LOCK_PATHS+=("$path")
+        LOCK_OWNERSHIP+=("$ownership")
+        LOCK_HASHES+=("$hash")
+        ;;
+    esac
+  done < "$lockfile_path"
+  return 0
+}
+
+write_lockfile() {
+  local lockfile_path="$TARGET/$LOCKFILE_NAME"
+  local agents_csv
+  agents_csv="$(join_by "," "${ENABLED_AGENTS[@]}")"
+  {
+    echo "# agentic-context deployment lockfile"
+    echo "# Managed automatically by deploy.sh — do not edit by hand."
+    echo "# Format: 'file <ownership> <sha256> <relative-path>'"
+    echo "version $SOURCE_VERSION"
+    echo "installed_at $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+    echo "agents $agents_csv"
+    local i
+    for i in "${!LOCK_PATHS[@]}"; do
+      echo "file ${LOCK_OWNERSHIP[$i]} ${LOCK_HASHES[$i]} ${LOCK_PATHS[$i]}"
+    done
+  } > "$lockfile_path"
 }
 
 agent_enabled() {
@@ -146,11 +295,59 @@ confirm_overwrite() {
 copy_file() {
   local src="$1"
   local dst="$2"
+  local rel="${dst#"$TARGET/"}"
+  local ownership
+  ownership="$(ownership_for "$rel")"
+
+  if [[ "$DEPLOY_MODE" == "update" ]]; then
+    if [[ ! -e "$dst" ]]; then
+      # New file — add it regardless of ownership.
+      mkdir -p "$(dirname "$dst")"
+      cp "$src" "$dst"
+      NEW_FILES+=("$rel")
+      lockfile_upsert "$rel" "$ownership" "$(compute_hash "$dst")"
+      return 0
+    fi
+
+    if [[ "$ownership" == "configure" ]]; then
+      # Configure files: never touched on update.
+      PRESERVED_CONFIGURE_FILES+=("$rel")
+      # Keep the existing lockfile entry unchanged (already loaded via read_existing_lockfile).
+      return 0
+    fi
+
+    # Template file that exists locally — check if it is pristine.
+    local current_hash recorded_hash source_hash
+    current_hash="$(compute_hash "$dst")"
+    recorded_hash="$(lockfile_get_hash "$rel")"
+    source_hash="$(compute_hash "$src")"
+
+    if [[ -n "$recorded_hash" && "$current_hash" == "$recorded_hash" ]]; then
+      # Pristine local file. Only write (and report) if source actually changed.
+      if [[ "$source_hash" != "$recorded_hash" ]]; then
+        cp "$src" "$dst"
+        UPDATED_FILES+=("$rel")
+      fi
+      lockfile_upsert "$rel" "$ownership" "$source_hash"
+    else
+      # Locally modified — preserve user edits, keep old lockfile entry.
+      MODIFIED_TEMPLATE_FILES+=("$rel")
+    fi
+    return 0
+  fi
+
+  # init mode — existing prompt-based flow.
   if ! confirm_overwrite "$dst"; then
+    # File exists and user chose not to overwrite. If we previously tracked it,
+    # keep the lockfile entry synced to what is actually on disk now.
+    if [[ -f "$dst" ]]; then
+      lockfile_upsert "$rel" "$ownership" "$(compute_hash "$dst")"
+    fi
     return 0
   fi
   mkdir -p "$(dirname "$dst")"
   cp "$src" "$dst"
+  lockfile_upsert "$rel" "$ownership" "$(compute_hash "$dst")"
 }
 
 copy_dir_contents() {
@@ -376,9 +573,28 @@ generate_skill() {
 
   local skill_dir="$target_dir/$name"
   local skill_file="$skill_dir/SKILL.md"
+  local rel_skill="${skill_file#"$TARGET/"}"
+  local existed_before=0
+  [[ -e "$skill_file" ]] && existed_before=1
 
-  if ! confirm_overwrite "$skill_file"; then
-    return
+  # Skills are always template-owned — regenerated from playbook frontmatter.
+  if [[ "$DEPLOY_MODE" == "update" ]]; then
+    if [[ $existed_before -eq 1 ]]; then
+      local current_hash recorded_hash
+      current_hash="$(compute_hash "$skill_file")"
+      recorded_hash="$(lockfile_get_hash "$rel_skill")"
+      if [[ -n "$recorded_hash" && "$current_hash" != "$recorded_hash" ]]; then
+        MODIFIED_TEMPLATE_FILES+=("$rel_skill")
+        return
+      fi
+    fi
+  else
+    if ! confirm_overwrite "$skill_file"; then
+      if [[ -f "$skill_file" ]]; then
+        lockfile_upsert "$rel_skill" "template" "$(compute_hash "$skill_file")"
+      fi
+      return
+    fi
   fi
 
   mkdir -p "$skill_dir"
@@ -403,6 +619,23 @@ description: "$description"
 Read and follow \`.context/playbooks/$rel_path\` in full.
 SKILL_EOF
   fi
+
+  local final_hash
+  final_hash="$(compute_hash "$skill_file")"
+
+  if [[ "$DEPLOY_MODE" == "update" ]]; then
+    if [[ $existed_before -eq 0 ]]; then
+      NEW_FILES+=("$rel_skill")
+    else
+      local prior_hash
+      prior_hash="$(lockfile_get_hash "$rel_skill")"
+      if [[ "$final_hash" != "$prior_hash" ]]; then
+        UPDATED_FILES+=("$rel_skill")
+      fi
+    fi
+  fi
+
+  lockfile_upsert "$rel_skill" "template" "$final_hash"
 }
 
 generate_skills_for_selected_agents() {
@@ -469,6 +702,14 @@ while [[ $# -gt 0 ]]; do
       usage >&2
       exit 1
       ;;
+    update)
+      if [[ "$DEPLOY_MODE" == "update" ]]; then
+        echo "Error: 'update' specified more than once." >&2
+        exit 1
+      fi
+      DEPLOY_MODE="update"
+      shift
+      ;;
     *)
       if [[ -z "$TARGET" ]]; then
         TARGET="$1"
@@ -487,51 +728,89 @@ if [[ $OVERWRITE_FLAG -eq 1 && $NO_OVERWRITE_FLAG -eq 1 ]]; then
   exit 1
 fi
 
-print_banner
-
-if [[ $AGENTS_FLAG_PROVIDED -eq 0 ]]; then
-  if [[ -t 0 && -t 1 ]]; then
-    if interactive_select_agents; then
-      :
-    else
-      selector_status=$?
-      if [[ $selector_status -eq 2 ]]; then
-        exit 0
-      fi
-      exit "$selector_status"
-    fi
-  else
-    echo "Error: --agents is mandatory in non-interactive mode." >&2
-    usage >&2
+if [[ "$DEPLOY_MODE" == "update" ]]; then
+  if [[ $OVERWRITE_FLAG -eq 1 || $NO_OVERWRITE_FLAG -eq 1 ]]; then
+    echo "Error: --overwrite / --no-overwrite have no effect in update mode." >&2
+    echo "Update preserves locally-modified template files automatically." >&2
     exit 1
   fi
 fi
 
-normalise_agents
-
-if [[ -z "$TARGET" ]]; then
-  TARGET="."
-fi
-
-if [[ ! -d "$TARGET" ]]; then
-  printf "Directory '%s' does not exist. Create it? [y/N] " "$TARGET"
-  read -r answer
-  case "$answer" in
-    [yY]|[yY][eE][sS])
-      mkdir -p "$TARGET"
-      echo "Created '$TARGET'"
-      ;;
-    *)
-      echo "Aborted." >&2
-      exit 1
-      ;;
-  esac
-fi
-
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+read_source_version
 
-echo "Deploying agent-contexts to $TARGET"
-echo "  Selected agents: $(join_by ', ' "${ENABLED_AGENTS[@]}")"
+print_banner
+
+if [[ "$DEPLOY_MODE" == "update" ]]; then
+  if [[ -z "$TARGET" ]]; then
+    TARGET="."
+  fi
+  if [[ ! -d "$TARGET" ]]; then
+    echo "Error: target directory '$TARGET' does not exist." >&2
+    exit 1
+  fi
+
+  if ! read_existing_lockfile; then
+    echo "Error: no $LOCKFILE_NAME found in '$TARGET'." >&2
+    echo "Run an init deploy first:  ./deploy.sh --agents <agent ...> $TARGET" >&2
+    exit 1
+  fi
+
+  if [[ $AGENTS_FLAG_PROVIDED -eq 0 ]]; then
+    if [[ -z "$PREV_LOCK_AGENTS" ]]; then
+      echo "Error: lockfile does not record any agents and --agents was not provided." >&2
+      exit 1
+    fi
+    IFS=',' read -r -a SELECTED_AGENTS <<< "$PREV_LOCK_AGENTS"
+  fi
+  normalise_agents
+
+  echo "Updating agentic-context in $TARGET"
+  echo "  Source version:   $SOURCE_VERSION"
+  echo "  Agents (locked):  $(join_by ', ' "${ENABLED_AGENTS[@]}")"
+else
+  if [[ $AGENTS_FLAG_PROVIDED -eq 0 ]]; then
+    if [[ -t 0 && -t 1 ]]; then
+      if interactive_select_agents; then
+        :
+      else
+        selector_status=$?
+        if [[ $selector_status -eq 2 ]]; then
+          exit 0
+        fi
+        exit "$selector_status"
+      fi
+    else
+      echo "Error: --agents is mandatory in non-interactive mode." >&2
+      usage >&2
+      exit 1
+    fi
+  fi
+
+  normalise_agents
+
+  if [[ -z "$TARGET" ]]; then
+    TARGET="."
+  fi
+
+  if [[ ! -d "$TARGET" ]]; then
+    printf "Directory '%s' does not exist. Create it? [y/N] " "$TARGET"
+    read -r answer
+    case "$answer" in
+      [yY]|[yY][eE][sS])
+        mkdir -p "$TARGET"
+        echo "Created '$TARGET'"
+        ;;
+      *)
+        echo "Aborted." >&2
+        exit 1
+        ;;
+    esac
+  fi
+
+  echo "Deploying agentic-context $SOURCE_VERSION to $TARGET"
+  echo "  Selected agents: $(join_by ', ' "${ENABLED_AGENTS[@]}")"
+fi
 
 echo "  Copying shared context files..."
 copy_file "$SCRIPT_DIR/core/AGENTS.md" "$TARGET/AGENTS.md"
@@ -604,29 +883,74 @@ else
   echo "  Skipping skill wrapper generation (no selected agent uses skills)."
 fi
 
+write_lockfile
+
 echo ""
-echo "Done. Next steps:"
-step=1
-next_step() {
-  echo "  $step. $1"
-  step=$((step + 1))
-}
 
-next_step "Fill in [CONFIGURE] sections in $TARGET/AGENTS.md"
+if [[ "$DEPLOY_MODE" == "update" ]]; then
+  echo "Update complete — lockfile refreshed at $SOURCE_VERSION."
+  if [[ ${#UPDATED_FILES[@]} -gt 0 ]]; then
+    echo ""
+    echo "Updated (${#UPDATED_FILES[@]} template file(s) refreshed from the template):"
+    for f in "${UPDATED_FILES[@]}"; do
+      echo "  - $f"
+    done
+  fi
+  if [[ ${#NEW_FILES[@]} -gt 0 ]]; then
+    echo ""
+    echo "Added (${#NEW_FILES[@]} new file(s) introduced by this version):"
+    for f in "${NEW_FILES[@]}"; do
+      echo "  + $f"
+    done
+  fi
+  if [[ ${#MODIFIED_TEMPLATE_FILES[@]} -gt 0 ]]; then
+    echo ""
+    echo "Preserved — locally modified template files (manual merge required):"
+    for f in "${MODIFIED_TEMPLATE_FILES[@]}"; do
+      echo "  ! $f"
+    done
+    echo ""
+    echo "  To accept the upstream version, delete the local file and re-run update."
+    echo "  To keep local edits, no action required — the next update will skip again."
+  fi
+  if [[ ${#PRESERVED_CONFIGURE_FILES[@]} -gt 0 ]]; then
+    echo ""
+    echo "Preserved — project-owned configure files (never auto-updated):"
+    for f in "${PRESERVED_CONFIGURE_FILES[@]}"; do
+      echo "  = $f"
+    done
+  fi
+  if [[ ${#UPDATED_FILES[@]} -eq 0 && ${#NEW_FILES[@]} -eq 0 && ${#MODIFIED_TEMPLATE_FILES[@]} -eq 0 ]]; then
+    echo "  No template files needed updating."
+  fi
+else
+  echo "Done. Next steps:"
+  step=1
+  next_step() {
+    echo "  $step. $1"
+    step=$((step + 1))
+  }
 
-if agent_enabled claude; then
-  next_step "Fill in [CONFIGURE] sections in $TARGET/CLAUDE.md"
-  next_step "Review $TARGET/.claude/settings.json and adjust permissions/hooks"
-fi
+  next_step "Fill in [CONFIGURE] sections in $TARGET/AGENTS.md"
 
-if agent_enabled copilot; then
-  next_step "Review $TARGET/.github/copilot-instructions.md"
-fi
+  if agent_enabled claude; then
+    next_step "Fill in [CONFIGURE] sections in $TARGET/CLAUDE.md"
+    next_step "Review $TARGET/.claude/settings.json and adjust permissions/hooks"
+  fi
 
-if [[ ${#SKIPPED_FILES[@]} -gt 0 ]]; then
+  if agent_enabled copilot; then
+    next_step "Review $TARGET/.github/copilot-instructions.md"
+  fi
+
+  if [[ ${#SKIPPED_FILES[@]} -gt 0 ]]; then
+    echo ""
+    echo "Skipped files (not overwritten — manual merge may be required):"
+    for f in "${SKIPPED_FILES[@]}"; do
+      echo "  - $f"
+    done
+  fi
+
   echo ""
-  echo "Skipped files (not overwritten — manual merge may be required):"
-  for f in "${SKIPPED_FILES[@]}"; do
-    echo "  - $f"
-  done
+  echo "Lockfile written to $TARGET/$LOCKFILE_NAME."
+  echo "To refresh template files in future, run:  ./deploy.sh update $TARGET"
 fi
