@@ -34,6 +34,8 @@ function retry(operation, max_attempts = 3, base_delay = 1.0):
             sleep(base_delay * 2^attempt + random(0, 0.5))
 ```
 
+<!-- PROJECT: Add language-specific retry implementation for your stack -->
+
 ---
 
 ## 2 · Security
@@ -46,9 +48,14 @@ function retry(operation, max_attempts = 3, base_delay = 1.0):
 | **Protect data in transit** | All network communication must use TLS 1.2+. Never downgrade to plain HTTP. Enforce HTTPS at the ingress controller and application level. |
 | **Protect data at rest** | Secrets, tokens, and credentials must never be committed to source control or written to disk unencrypted. Use Azure Key Vault for all secret management. Enable encryption at rest on all Azure data stores. |
 | **Audit trail** | Log all mutating operations with timestamps, actor identity, and resource affected. Ship audit logs to a tamper-evident store. Enable Azure Activity Log and Diagnostic Settings for all resources. |
-| **Dependency scanning** | Run a software composition analysis tool (e.g., `pip-audit`, Dependabot, Snyk) in CI. Block merges on high/critical CVEs. Patch within 30 days. |
+| **Dependency scanning** | Run a software composition analysis tool (e.g., `npm audit`, `pip-audit`, Dependabot, Snyk) in CI. Block merges on high/critical CVEs. Patch within 30 days. |
 | **Static analysis** | Integrate SAST tooling into the CI pipeline. Address findings before merge — do not accumulate a backlog of suppressed warnings. |
 | **Network segmentation** | Deploy workloads in private virtual networks where possible. Use NSGs with deny-by-default rules, Azure Firewall for centralised egress control, and Private Endpoints for PaaS services. Expose only what is explicitly required. |
+
+<!-- PROJECT: Link to your project's security-specific instructions if they exist, e.g.:
+- See `standards/security.md` for OWASP-specific controls.
+- See your Entra ID tenant documentation for conditional access policies.
+-->
 
 ---
 
@@ -96,6 +103,12 @@ function retry(operation, max_attempts = 3, base_delay = 1.0):
 | **Minimise data movement** | Request only the fields needed. Avoid fetching full records when a subset suffices. Compress payloads in transit where beneficial. |
 | **Benchmarking** | Establish baseline latency metrics (p50, p95, p99) for critical paths. Alert on regressions. Profile before optimising — measure, don't guess. |
 
+<!-- PROJECT: Document your caching strategy, e.g.:
+| Cache layer | Technology | TTL | Invalidation |
+|---|---|---|---|
+| [CACHE_STRATEGY] | [TECHNOLOGY] | [TTL] | [TRIGGER] |
+-->
+
 ---
 
 ## Non-Negotiables
@@ -127,6 +140,7 @@ Before merging any significant change, verify:
 - [ ] Failures return structured errors — no unhandled crashes
 - [ ] Mutating operations are idempotent
 - [ ] Health checks and readiness probes are in place
+- [ ] Stateless workloads are deployed across availability zones where supported
 
 **Security**
 - [ ] No secrets, tokens, or credentials are hardcoded or committed

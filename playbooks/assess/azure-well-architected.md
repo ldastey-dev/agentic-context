@@ -137,7 +137,7 @@ For each pillar, list every finding with:
 | Finding ID | Title | Severity | Pillar | Effort (S/M/L/XL) | Priority Rank | Remediation Phase |
 |---|---|---|---|---|---|---|
 
-Quick wins (high severity + small effort) rank highest. Security and reliability findings rank above cost and performance.
+Quick wins (high severity + small effort) rank highest. Security and reliability findings rank above operational excellence, performance, and cost.
 
 ---
 
