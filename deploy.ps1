@@ -168,11 +168,13 @@ function Copy-DirectoryContents {
 }
 
 function Enable-VirtualTerminal {
-    # On older Windows PowerShell + classic conhost, ANSI escape sequences are
-    # printed as literal text unless ENABLE_VIRTUAL_TERMINAL_PROCESSING is set.
-    # Best-effort: silently no-op if the API isn't available or the call fails.
+    # Returns $true if ANSI escape sequences are usable on stdout. On non-Windows
+    # hosts this is always true; on Windows it requires ENABLE_VIRTUAL_TERMINAL_PROCESSING,
+    # which we set via kernel32!SetConsoleMode. Returns $false if the API isn't
+    # available (e.g. constrained language mode) or the call fails — callers should
+    # refuse to render ANSI in that case rather than print literal escape text.
     $onWindows = ($PSVersionTable.PSVersion.Major -le 5) -or $IsWindows
-    if (-not $onWindows) { return }
+    if (-not $onWindows) { return $true }
 
     try {
         if (-not ('AgenticContext.NativeConsole' -as [type])) {
@@ -186,12 +188,18 @@ public static extern bool SetConsoleMode(System.IntPtr hConsoleHandle, uint dwMo
 '@
         }
 
-        $stdOut = [AgenticContext.NativeConsole]::GetStdHandle(-11)  # STD_OUTPUT_HANDLE
+        $STD_OUTPUT_HANDLE = -11
+        $ENABLE_VIRTUAL_TERMINAL_PROCESSING = 0x4
+
+        $stdOut = [AgenticContext.NativeConsole]::GetStdHandle($STD_OUTPUT_HANDLE)
         $mode = 0
         if ([AgenticContext.NativeConsole]::GetConsoleMode($stdOut, [ref]$mode)) {
-            [void][AgenticContext.NativeConsole]::SetConsoleMode($stdOut, $mode -bor 0x4)  # ENABLE_VIRTUAL_TERMINAL_PROCESSING
+            return [AgenticContext.NativeConsole]::SetConsoleMode($stdOut, $mode -bor $ENABLE_VIRTUAL_TERMINAL_PROCESSING)
         }
-    } catch { }
+        return $false
+    } catch {
+        return $false
+    }
 }
 
 function Render-AgentMenu {
@@ -229,7 +237,10 @@ function Render-AgentMenu {
 }
 
 function Select-AgentsInteractive {
-    Enable-VirtualTerminal
+    if (-not (Enable-VirtualTerminal)) {
+        Write-Error "Interactive menu unavailable: virtual-terminal mode could not be enabled. Re-run with -Agents <list>."
+        exit 1
+    }
 
     $options = @('all') + $ValidAgents + @('clear and exit')
     $optionsCount = $options.Count
@@ -440,7 +451,9 @@ if ($NoOverwrite) {
 if (-not $Agents -or $Agents.Count -eq 0) {
     $isInteractive = $false
     try {
-        $isInteractive = [Environment]::UserInteractive -and -not [Console]::IsInputRedirected
+        $isInteractive = [Environment]::UserInteractive `
+            -and -not [Console]::IsInputRedirected `
+            -and -not [Console]::IsOutputRedirected
     } catch { }
 
     if ($isInteractive) {
