@@ -23,21 +23,31 @@
 
 .EXAMPLE
     .\deploy.ps1 -Agents claude,copilot
+    .\deploy.ps1 -Agents claude copilot
+    .\deploy.ps1 -Agents "claude copilot windsurf"
     .\deploy.ps1 -Agents all -TargetRepo C:\repos\my-project
     .\deploy.ps1
     .\deploy.ps1 -Agents all -TargetRepo C:\repos\my-project -NoOverwrite
 #>
 [CmdletBinding()]
 param(
-    [ValidateSet('claude', 'copilot', 'cursor', 'devin', 'windsurf', 'all')]
     [string[]]$Agents,
     [string]$TargetRepo,
     [switch]$Help,
     [switch]$Overwrite,
-    [switch]$NoOverwrite
+    [switch]$NoOverwrite,
+    [Parameter(ValueFromRemainingArguments = $true)]
+    [string[]]$RemainingAgents
 )
 
 $ErrorActionPreference = 'Stop'
+
+if ($RemainingAgents) {
+    $Agents = @($Agents) + @($RemainingAgents)
+}
+if ($Agents) {
+    $Agents = @($Agents | ForEach-Object { $_ -split '[\s,]+' } | Where-Object { $_ -ne '' })
+}
 
 $ValidAgents = @('claude', 'copilot', 'cursor', 'devin', 'windsurf')
 $script:EnabledAgents = @()
