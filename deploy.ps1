@@ -167,18 +167,48 @@ function Copy-DirectoryContents {
     }
 }
 
+function Enable-VirtualTerminal {
+    # On older Windows PowerShell + classic conhost, ANSI escape sequences are
+    # printed as literal text unless ENABLE_VIRTUAL_TERMINAL_PROCESSING is set.
+    # Best-effort: silently no-op if the API isn't available or the call fails.
+    $onWindows = ($PSVersionTable.PSVersion.Major -le 5) -or $IsWindows
+    if (-not $onWindows) { return }
+
+    try {
+        if (-not ('AgenticContext.NativeConsole' -as [type])) {
+            Add-Type -Namespace AgenticContext -Name NativeConsole -MemberDefinition @'
+[System.Runtime.InteropServices.DllImport("kernel32.dll", SetLastError = true)]
+public static extern System.IntPtr GetStdHandle(int nStdHandle);
+[System.Runtime.InteropServices.DllImport("kernel32.dll", SetLastError = true)]
+public static extern bool GetConsoleMode(System.IntPtr hConsoleHandle, out uint lpMode);
+[System.Runtime.InteropServices.DllImport("kernel32.dll", SetLastError = true)]
+public static extern bool SetConsoleMode(System.IntPtr hConsoleHandle, uint dwMode);
+'@
+        }
+
+        $stdOut = [AgenticContext.NativeConsole]::GetStdHandle(-11)  # STD_OUTPUT_HANDLE
+        $mode = 0
+        if ([AgenticContext.NativeConsole]::GetConsoleMode($stdOut, [ref]$mode)) {
+            [void][AgenticContext.NativeConsole]::SetConsoleMode($stdOut, $mode -bor 0x4)  # ENABLE_VIRTUAL_TERMINAL_PROCESSING
+        }
+    } catch { }
+}
+
 function Render-AgentMenu {
     param(
         [string[]]$Options,
         [int[]]$Selected,
         [int]$Cursor,
-        [int]$MenuTop,
-        [string]$StatusMessage
+        [string]$StatusMessage,
+        [bool]$FirstRender
     )
 
-    [Console]::SetCursorPosition(0, $MenuTop)
-    $width = 79
-    try { $width = [Console]::WindowWidth - 1 } catch { }
+    $esc = [char]27
+    $linesDrawn = $Options.Count + 1   # menu rows + status row
+
+    if (-not $FirstRender) {
+        [Console]::Write("$esc[${linesDrawn}A")
+    }
 
     for ($i = 0; $i -lt $Options.Count; $i++) {
         $pointer = "  "
@@ -187,20 +217,20 @@ function Render-AgentMenu {
         if ($Selected[$i] -eq 1) { $marker = "[x]" }
 
         $line = "$pointer$marker $($Options[$i])"
-        $padding = " " * [Math]::Max(0, $width - $line.Length)
 
         if ($i -eq $Cursor) {
-            Write-Host "$line$padding" -ForegroundColor Green
+            [Console]::Write("`r$esc[2K$esc[32m$line$esc[0m`n")
         } else {
-            Write-Host "$line$padding"
+            [Console]::Write("`r$esc[2K$line`n")
         }
     }
 
-    $statusPad = " " * [Math]::Max(0, $width - $StatusMessage.Length)
-    Write-Host "$StatusMessage$statusPad"
+    [Console]::Write("`r$esc[2K$StatusMessage`n")
 }
 
 function Select-AgentsInteractive {
+    Enable-VirtualTerminal
+
     $options = @('all') + $ValidAgents + @('clear and exit')
     $optionsCount = $options.Count
     $exitIndex = $optionsCount - 1
@@ -213,12 +243,13 @@ function Select-AgentsInteractive {
     Write-Host "Select 'clear and exit' to clear selection and quit."
     Write-Host ""
 
-    $menuTop = [Console]::CursorTop
+    $firstRender = $true
 
     try {
         [Console]::CursorVisible = $false
 
-        Render-AgentMenu -Options $options -Selected $selected -Cursor $cursor -MenuTop $menuTop -StatusMessage $statusMsg
+        Render-AgentMenu -Options $options -Selected $selected -Cursor $cursor -StatusMessage $statusMsg -FirstRender $firstRender
+        $firstRender = $false
 
         while ($true) {
             $keyInfo = [Console]::ReadKey($true)
@@ -286,7 +317,7 @@ function Select-AgentsInteractive {
                 }
             }
 
-            Render-AgentMenu -Options $options -Selected $selected -Cursor $cursor -MenuTop $menuTop -StatusMessage $statusMsg
+            Render-AgentMenu -Options $options -Selected $selected -Cursor $cursor -StatusMessage $statusMsg -FirstRender $firstRender
         }
     } finally {
         [Console]::CursorVisible = $true
