@@ -167,18 +167,56 @@ function Copy-DirectoryContents {
     }
 }
 
+function Enable-VirtualTerminal {
+    # Returns $true if ANSI escape sequences are usable on stdout. On non-Windows
+    # hosts this is always true; on Windows it requires ENABLE_VIRTUAL_TERMINAL_PROCESSING,
+    # which we set via kernel32!SetConsoleMode. Returns $false if the API isn't
+    # available (e.g. constrained language mode) or the call fails — callers should
+    # refuse to render ANSI in that case rather than print literal escape text.
+    $onWindows = ($PSVersionTable.PSVersion.Major -le 5) -or $IsWindows
+    if (-not $onWindows) { return $true }
+
+    try {
+        if (-not ('AgenticContext.NativeConsole' -as [type])) {
+            Add-Type -Namespace AgenticContext -Name NativeConsole -MemberDefinition @'
+[System.Runtime.InteropServices.DllImport("kernel32.dll", SetLastError = true)]
+public static extern System.IntPtr GetStdHandle(int nStdHandle);
+[System.Runtime.InteropServices.DllImport("kernel32.dll", SetLastError = true)]
+public static extern bool GetConsoleMode(System.IntPtr hConsoleHandle, out uint lpMode);
+[System.Runtime.InteropServices.DllImport("kernel32.dll", SetLastError = true)]
+public static extern bool SetConsoleMode(System.IntPtr hConsoleHandle, uint dwMode);
+'@
+        }
+
+        $STD_OUTPUT_HANDLE = -11
+        $ENABLE_VIRTUAL_TERMINAL_PROCESSING = 0x4
+
+        $stdOut = [AgenticContext.NativeConsole]::GetStdHandle($STD_OUTPUT_HANDLE)
+        $mode = 0
+        if ([AgenticContext.NativeConsole]::GetConsoleMode($stdOut, [ref]$mode)) {
+            return [AgenticContext.NativeConsole]::SetConsoleMode($stdOut, $mode -bor $ENABLE_VIRTUAL_TERMINAL_PROCESSING)
+        }
+        return $false
+    } catch {
+        return $false
+    }
+}
+
 function Render-AgentMenu {
     param(
         [string[]]$Options,
         [int[]]$Selected,
         [int]$Cursor,
-        [int]$MenuTop,
-        [string]$StatusMessage
+        [string]$StatusMessage,
+        [bool]$FirstRender
     )
 
-    [Console]::SetCursorPosition(0, $MenuTop)
-    $width = 79
-    try { $width = [Console]::WindowWidth - 1 } catch { }
+    $esc = [char]27
+    $linesDrawn = $Options.Count + 1   # menu rows + status row
+
+    if (-not $FirstRender) {
+        [Console]::Write("$esc[${linesDrawn}A")
+    }
 
     for ($i = 0; $i -lt $Options.Count; $i++) {
         $pointer = "  "
@@ -187,20 +225,23 @@ function Render-AgentMenu {
         if ($Selected[$i] -eq 1) { $marker = "[x]" }
 
         $line = "$pointer$marker $($Options[$i])"
-        $padding = " " * [Math]::Max(0, $width - $line.Length)
 
         if ($i -eq $Cursor) {
-            Write-Host "$line$padding" -ForegroundColor Green
+            [Console]::Write("`r$esc[2K$esc[32m$line$esc[0m`n")
         } else {
-            Write-Host "$line$padding"
+            [Console]::Write("`r$esc[2K$line`n")
         }
     }
 
-    $statusPad = " " * [Math]::Max(0, $width - $StatusMessage.Length)
-    Write-Host "$StatusMessage$statusPad"
+    [Console]::Write("`r$esc[2K$StatusMessage`n")
 }
 
 function Select-AgentsInteractive {
+    if (-not (Enable-VirtualTerminal)) {
+        Write-Error "Interactive menu unavailable: virtual-terminal mode could not be enabled. Re-run with -Agents <list>."
+        exit 1
+    }
+
     $options = @('all') + $ValidAgents + @('clear and exit')
     $optionsCount = $options.Count
     $exitIndex = $optionsCount - 1
@@ -213,12 +254,13 @@ function Select-AgentsInteractive {
     Write-Host "Select 'clear and exit' to clear selection and quit."
     Write-Host ""
 
-    $menuTop = [Console]::CursorTop
+    $firstRender = $true
 
     try {
         [Console]::CursorVisible = $false
 
-        Render-AgentMenu -Options $options -Selected $selected -Cursor $cursor -MenuTop $menuTop -StatusMessage $statusMsg
+        Render-AgentMenu -Options $options -Selected $selected -Cursor $cursor -StatusMessage $statusMsg -FirstRender $firstRender
+        $firstRender = $false
 
         while ($true) {
             $keyInfo = [Console]::ReadKey($true)
@@ -286,7 +328,7 @@ function Select-AgentsInteractive {
                 }
             }
 
-            Render-AgentMenu -Options $options -Selected $selected -Cursor $cursor -MenuTop $menuTop -StatusMessage $statusMsg
+            Render-AgentMenu -Options $options -Selected $selected -Cursor $cursor -StatusMessage $statusMsg -FirstRender $firstRender
         }
     } finally {
         [Console]::CursorVisible = $true
@@ -409,7 +451,9 @@ if ($NoOverwrite) {
 if (-not $Agents -or $Agents.Count -eq 0) {
     $isInteractive = $false
     try {
-        $isInteractive = [Environment]::UserInteractive -and -not [Console]::IsInputRedirected
+        $isInteractive = [Environment]::UserInteractive `
+            -and -not [Console]::IsInputRedirected `
+            -and -not [Console]::IsOutputRedirected
     } catch { }
 
     if ($isInteractive) {
