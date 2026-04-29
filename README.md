@@ -99,6 +99,7 @@ standards/                              Tier 3 — reference (→ target .contex
   operational-excellence.md             Runbooks, config, change management
   api-design.md                         REST/GraphQL API design standards
   aws-well-architected.md               AWS Well-Architected Framework (6 pillars)
+  azure-well-architected.md             Azure Well-Architected Framework (5 pillars)
   gdpr.md                               GDPR data protection standards
   pci-dss.md                            PCI DSS payment card data standards
   accessibility.md                      WCAG 2.2 Level AA accessibility standards
@@ -114,10 +115,11 @@ standards/                              Tier 3 — reference (→ target .contex
   docker.md                             Multi-stage builds, layer optimisation, scanning
 
 playbooks/                              Tier 2 — on demand (→ target .context/playbooks/)
-  assess/                               Structured codebase-level assessments (12)
-    accessibility.md, api-design.md, architecture.md, code-quality.md,
-    compliance.md, full.md, iac.md, observability.md, performance.md,
-    security.md, tech-debt.md, test-coverage.md
+  assess/                               Structured codebase-level assessments (14)
+    accessibility.md, api-design.md, architecture.md, aws-well-architected.md,
+    azure-well-architected.md, code-quality.md, compliance.md, full.md,
+    iac.md, observability.md, performance.md, security.md, tech-debt.md,
+    test-coverage.md
   review/                               PR-level and change-level reviews (10)
     accessibility.md, api-design.md, architecture.md, code-quality.md,
     compliance.md, iac.md, observability.md, performance.md,

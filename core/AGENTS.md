@@ -138,6 +138,7 @@ The following standards are non-negotiable. Do not weaken them. Detailed guidanc
 | Operations | IaC, env vars, small focused PRs | `.context/standards/operational-excellence.md` |
 | API Design | OpenAPI 3+, REST, RFC 7807 errors | `.context/standards/api-design.md` |
 | AWS | 6 pillars: OpEx, Security, Reliability, Perf, Cost, Sustainability | `.context/standards/aws-well-architected.md` |
+| Azure | 5 pillars: Reliability, Security, Cost, OpEx, Performance | `.context/standards/azure-well-architected.md` |
 | GDPR | Lawful basis, data minimisation, subject rights | `.context/standards/gdpr.md` |
 | PCI DSS | CDE scoping, AES-256, TLS 1.2+ | `.context/standards/pci-dss.md` |
 | Accessibility | WCAG 2.2 AA, keyboard, ARIA, contrast | `.context/standards/accessibility.md` |
