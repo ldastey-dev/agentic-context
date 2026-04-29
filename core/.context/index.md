@@ -21,6 +21,7 @@ Combine multiple matches when a task spans domains.
 | operations, IaC, infrastructure, runbook, config | `.context/standards/operational-excellence.md` | IaC, env vars, small focused PRs |
 | API, REST, endpoint, OpenAPI, error response | `.context/standards/api-design.md` | OpenAPI 3+, REST, RFC 7807 errors |
 | AWS, well-architected, cloud, pillar | `.context/standards/aws-well-architected.md` | 6 pillars: OpEx, Security, Reliability, Perf, Cost, Sustainability |
+| Azure, well-architected, cloud, pillar, AKS, Cosmos DB, Entra ID, Key Vault | `.context/standards/azure-well-architected.md` | 5 pillars: Reliability, Security, Cost, OpEx, Performance — plus Azure database selection guide |
 | GDPR, data protection, privacy, consent, subject rights | `.context/standards/gdpr.md` | Lawful basis, data minimisation, subject rights |
 | PCI, DSS, payment, cardholder, card data | `.context/standards/pci-dss.md` | CDE scoping, AES-256, TLS 1.2+ |
 | accessibility, a11y, WCAG, ARIA, screen reader, keyboard | `.context/standards/accessibility.md` | WCAG 2.2 AA, keyboard, ARIA, contrast |
@@ -44,6 +45,8 @@ Combine multiple matches when a task spans domains.
 | assess accessibility, WCAG audit, a11y assessment | `.context/playbooks/assess/accessibility.md` | Full WCAG 2.2 Level AA assessment |
 | assess API, API audit, API design assessment | `.context/playbooks/assess/api-design.md` | API design and developer experience assessment |
 | assess architecture, architecture review, well-architected | `.context/playbooks/assess/architecture.md` | Well-Architected Framework assessment |
+| assess AWS, AWS well-architected, AWS cloud review | `.context/playbooks/assess/aws-well-architected.md` | AWS Well-Architected Framework assessment (6 pillars) |
+| assess Azure, Azure well-architected, Azure cloud review | `.context/playbooks/assess/azure-well-architected.md` | Azure Well-Architected Framework assessment (5 pillars) |
 | assess code quality, SOLID assessment, clean code audit | `.context/playbooks/assess/code-quality.md` | SOLID and Clean Code assessment |
 | assess compliance, GDPR audit, PCI audit, regulatory | `.context/playbooks/assess/compliance.md` | GDPR and PCI-DSS compliance assessment |
 | full assessment, comprehensive assessment, health check | `.context/playbooks/assess/full.md` | Single-pass assessment across all domains |

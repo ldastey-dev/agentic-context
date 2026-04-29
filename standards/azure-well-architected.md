@@ -87,6 +87,7 @@ function retry(operation, max_attempts = 3, base_delay = 1.0):
 | **Small, frequent changes** | PRs should be focused and atomic. Deployment pipelines must support automated rollback. Feature flags over long-lived branches. |
 | **Failure anticipation** | Handle upstream service failures gracefully — return structured error responses, never unhandled exceptions. Run game days or chaos experiments where appropriate. |
 | **Post-incident learning** | Conduct blameless post-mortems for every production incident; track action items to completion. |
+| **Azure Policy** | Enforce organisational guardrails through Azure Policy definitions and initiatives. Assign policies at the management group or subscription scope to prevent non-compliant resources from being created (e.g. deny public IP on subnets, require tags, enforce allowed SKUs). Use audit-mode policies to surface drift without blocking. Combine with Defender for Cloud regulatory compliance dashboards to track posture continuously. |
 
 ---
 
@@ -102,6 +103,7 @@ function retry(operation, max_attempts = 3, base_delay = 1.0):
 | **Caching strategy** | Cache read-heavy, infrequently-changing data close to the consumer (in-memory, local file, Azure Cache for Redis, Azure Front Door). Define TTLs and invalidation rules explicitly. |
 | **Minimise data movement** | Request only the fields needed. Avoid fetching full records when a subset suffices. Compress payloads in transit where beneficial. |
 | **Benchmarking** | Establish baseline latency metrics (p50, p95, p99) for critical paths. Alert on regressions. Profile before optimising — measure, don't guess. |
+| **Auto-scaling** | Configure AKS cluster autoscaler to add and remove nodes based on pending pod demand. Enable Horizontal Pod Autoscaler (HPA) for each workload deployment, targeting CPU and memory utilisation or custom KEDA metrics. Set resource `requests` and `limits` on every container — HPA cannot function without them. Define minimum and maximum replica counts to bound cost and ensure baseline availability. |
 
 <!-- PROJECT: Document your caching strategy, e.g.:
 | Cache layer | Technology | TTL | Invalidation |
