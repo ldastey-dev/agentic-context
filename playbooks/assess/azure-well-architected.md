@@ -1,7 +1,7 @@
 ---
 name: assess-azure-well-architected
 description: "Run Azure Well-Architected Framework assessment across all five pillars: reliability, security, cost optimisation, operational excellence, and performance efficiency"
-keywords: [assess well-architected, Azure audit, cloud architecture review, five pillars]
+keywords: [assess well-architected, Azure audit, cloud architecture review, five pillars, Microsoft Azure, WAF]
 ---
 
 # Azure Well-Architected Framework Assessment
@@ -28,7 +28,8 @@ Before assessing anything, build cloud architecture context. Investigate and doc
 - **Data stores** -- Identify which Azure database product is in use and document the justification. These are two distinct products — do not conflate them:
   - **Azure Cosmos DB** — Microsoft's globally distributed, multi-model database. Billed by Request Units (RU/s). Supports multiple APIs: NoSQL (native), MongoDB (wire-protocol), Apache Cassandra, Apache Gremlin, Table, and PostgreSQL. Best for cloud-native globally distributed OLTP, high-throughput transactional systems, and real-time AI/vector workloads. Terraform: `azurerm_cosmosdb_account`. See `standards/azure-well-architected.md §Azure Cosmos DB`.
   - **Azure DocumentDB** — A separate, fully managed open-source document database with 99.03% MongoDB wire-protocol compatibility, built on the Linux Foundation DocumentDB engine (MIT licence). Billed by vCore compute tier — predictable cost for sustained or scan-heavy workloads. Supports multi-cloud and hybrid replication. Best for MongoDB migrations, analytics-oriented workloads, and multi-cloud/hybrid scenarios. See `standards/azure-well-architected.md §Azure DocumentDB`.
-  - Also inventory: Azure Blob Storage, Azure Cache for Redis, Azure Service Bus, or equivalent. How are they provisioned and managed?
+  - Also inventory: Azure Blob Storage, Azure Cache for Redis, or equivalent storage/cache. How are they provisioned and managed?
+- **Messaging** -- Identify asynchronous messaging services in use: Azure Service Bus, Azure Event Grid, Azure Event Hubs, or equivalent. How are topics, subscriptions, and dead-letter queues managed? Are they provisioned via IaC?
 - **Networking** -- VNet design, subnets, NSGs, Private Endpoints, Azure Front Door, Application Gateway, API Management.
 - **Identity and access** -- how are permissions structured? Managed Identity, DefaultAzureCredential, Azure RBAC, Azure AD / Entra ID roles, service principals.
 - **CI/CD pipeline** -- how is the application built and deployed? Azure DevOps Pipelines, GitOps, deployment strategy.
@@ -88,7 +89,7 @@ Evaluate the application against each pillar as defined in `standards/azure-well
 
 | Aspect | What to evaluate |
 |---|---|
-| Infrastructure as Code | Verify all cloud resources are defined in Terraform (AzureRM provider) per `standards/azure-well-architected.md` §4. No ClickOps. |
+| Infrastructure as Code | Verify all cloud resources are defined in Terraform (AzureRM or AzAPI provider), Bicep, or ARM templates per `standards/azure-well-architected.md` §4. No ClickOps. |
 | Observability | Verify structured logging, Azure Monitor, Application Insights, and OpenTelemetry tracing per `standards/azure-well-architected.md` §4. Can the team answer arbitrary questions about system behaviour? |
 | Runbooks | Verify operational procedures are documented per `standards/azure-well-architected.md` §4 and `standards/operational-excellence.md` §2. |
 | Small, frequent changes | Verify deployment practices per `standards/azure-well-architected.md` §4. Automated rollback, feature flags, atomic PRs. |
@@ -146,6 +147,8 @@ Quick wins (high severity + small effort) rank highest. Security and reliability
 ---
 
 ## Phase 3: Remediation Plan
+
+> **Note:** Pillar numbering in §2 follows WAF canonical order (Reliability first). Remediation phases A–E below follow risk priority order (Security first). Both orderings are intentional.
 
 Group and order actions into phases:
 

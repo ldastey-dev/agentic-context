@@ -81,7 +81,7 @@ function retry(operation, max_attempts = 3, base_delay = 1.0):
 
 | Practice | Expectation |
 |---|---|
-| **Infrastructure as Code** | All cloud resources (compute, storage, networking, RBAC) must be defined in code — Terraform with the AzureRM provider. No ClickOps. |
+| **Infrastructure as Code** | All cloud resources (compute, storage, networking, RBAC) must be defined in code — Terraform (AzureRM or AzAPI provider) or Bicep; ARM templates are acceptable for parity with existing modules. No ClickOps. |
 | **Observability** | Emit structured JSON logs with consistent fields: `request_id`, `operation`, `duration_ms`, `status`. Integrate with Azure Monitor, Application Insights, Log Analytics, and OpenTelemetry. |
 | **Runbooks** | Document every operational procedure (deployment, rollback, credential rotation, incident response) in the repo so any operator can execute without tribal knowledge. |
 | **Small, frequent changes** | PRs should be focused and atomic. Deployment pipelines must support automated rollback. Feature flags over long-lived branches. |
@@ -170,7 +170,7 @@ or scope:
 | # | Rule |
 |---|---|
 | 1 | **No secrets in source control.** Credentials, tokens, and keys must live in Azure Key Vault or environment variables — never committed to the repo. |
-| 2 | **No ClickOps.** All infrastructure is defined in Terraform and deployed through a pipeline. Manual portal changes are forbidden in production. |
+| 2 | **No ClickOps.** All infrastructure is defined in Terraform (AzureRM or AzAPI), Bicep, or ARM templates and deployed through a pipeline. Manual portal changes are forbidden in production. |
 | 3 | **No overly broad Azure RBAC role assignments in production.** Every identity follows least-privilege. `Owner` or `Contributor` at subscription scope on production resources is a blocking finding. |
 | 4 | **No unhandled exceptions in production paths.** Every external call is wrapped in error handling that returns a structured response. |
 | 5 | **No unbounded queries or API responses.** All data retrieval must have explicit limits, pagination, or timeouts. |
