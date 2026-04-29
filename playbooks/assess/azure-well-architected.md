@@ -25,10 +25,7 @@ Before assessing anything, build cloud architecture context. Investigate and doc
 - **Cloud deployment status** -- is the application already deployed to Azure, another cloud, or still local/on-premises? What services are in use?
 - **Architecture style** -- monolith, modular monolith, microservices, serverless, event-driven, or hybrid?
 - **Compute model** -- AKS, Container Apps, App Service, Azure Functions, or a combination? What node pool sizes and VM SKUs?
-- **Data stores** -- Identify which Azure database product is in use and document the justification. These are two distinct products — do not conflate them:
-  - **Azure Cosmos DB** — Microsoft's globally distributed, multi-model database. Billed by Request Units (RU/s). Supports multiple APIs: NoSQL (native), MongoDB (wire-protocol), Apache Cassandra, Apache Gremlin, Table, and PostgreSQL. Best for cloud-native globally distributed OLTP, high-throughput transactional systems, and real-time AI/vector workloads. Terraform: `azurerm_cosmosdb_account`. See `standards/azure-well-architected.md §Azure Cosmos DB`.
-  - **Azure DocumentDB** — A separate, fully managed open-source document database with 99.03% MongoDB wire-protocol compatibility, built on the Linux Foundation DocumentDB engine (MIT licence). Billed by vCore compute tier — predictable cost for sustained or scan-heavy workloads. Supports multi-cloud and hybrid replication. Best for MongoDB migrations, analytics-oriented workloads, and multi-cloud/hybrid scenarios. See `standards/azure-well-architected.md §Azure DocumentDB`.
-  - Also inventory: Azure Blob Storage, Azure Cache for Redis, or equivalent storage/cache. How are they provisioned and managed?
+- **Data stores** -- Azure Cosmos DB, Azure SQL Database, PostgreSQL Flexible Server, Azure DocumentDB, Storage Accounts / Blob, Cache for Redis, or equivalent. How are they provisioned and managed?
 - **Messaging** -- Identify asynchronous messaging services in use: Azure Service Bus, Azure Event Grid, Azure Event Hubs, or equivalent. How are topics, subscriptions, and dead-letter queues managed? Are they provisioned via IaC?
 - **Networking** -- VNet design, subnets, NSGs, Private Endpoints, Azure Front Door, Application Gateway, API Management.
 - **Identity and access** -- how are permissions structured? Managed Identity, DefaultAzureCredential, Azure RBAC, Azure AD / Entra ID roles, service principals.
@@ -56,7 +53,7 @@ Evaluate the application against each pillar as defined in `standards/azure-well
 | Timeouts | Verify explicit timeouts on all outbound calls per `standards/azure-well-architected.md` §1 and `standards/resilience.md` §3. |
 | Circuit breakers | Verify circuit breaker pattern on external dependencies per `standards/azure-well-architected.md` §1 and `standards/resilience.md` §1. |
 | Data durability | Verify backup procedures, RPO/RTO definitions, and tested restore per `standards/azure-well-architected.md` §1. |
-| Availability zones | Verify zone-redundant deployment for AKS, Cosmos DB (or DocumentDB cluster nodes), and dependent services per `standards/azure-well-architected.md` §1. Confirm which database product is deployed and apply the appropriate zone-redundancy configuration for that product. |
+| Availability zones | Verify zone-redundant deployment for AKS, stateful data services, and dependent components per `standards/azure-well-architected.md` §1. |
 
 ### 2.2 Security
 
@@ -75,7 +72,6 @@ Evaluate the application against each pillar as defined in `standards/azure-well
 
 | Aspect | What to evaluate |
 |---|---|
-| Database billing model fit | Verify the database product choice is appropriate for the access pattern. Cosmos DB (RU/s billing) is cost-efficient for targeted key-based lookups but expensive for large scans or batch analytics; DocumentDB (vCore billing) is more cost-predictable for sustained or scan-heavy workloads. Flag mismatches between billing model and actual access patterns. See `standards/azure-well-architected.md §Azure Database Selection Guide`. |
 | Unnecessary calls | Verify cache-before-network pattern per `standards/azure-well-architected.md` §3 and `standards/cost-optimisation.md` §1. |
 | Dependency minimisation | Verify stdlib-first approach per `standards/azure-well-architected.md` §3 and `standards/cost-optimisation.md` §2. |
 | Right-size compute | Verify VM SKU and node pool sizing based on measurement per `standards/azure-well-architected.md` §3 and `standards/cost-optimisation.md` §4. |

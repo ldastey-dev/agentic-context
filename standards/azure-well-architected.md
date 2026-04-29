@@ -113,55 +113,6 @@ function retry(operation, max_attempts = 3, base_delay = 1.0):
 
 ---
 
-## Azure Database Selection Guide
-
-Azure offers two distinct managed document/NoSQL database products with different billing models, performance characteristics, and appropriate use cases. **Do not conflate them.**
-
-### Azure Cosmos DB
-
-Azure Cosmos DB is Microsoft's flagship globally distributed, multi-model database service. It is **not** a MongoDB clone — it is a purpose-built cloud-native database with multiple compatibility APIs layered on top of a common engine.
-
-| Characteristic | Detail |
-|---|---|
-| **Billing model** | Request Units (RU/s) — provisioned or serverless throughput. Cost scales with read/write operations, not just compute. |
-| **APIs** | NoSQL (native), MongoDB (wire-protocol compatible), Apache Cassandra, Apache Gremlin, Table, PostgreSQL (distributed, via Citus) |
-| **SLA** | 99.999% availability SLA for multi-region accounts with multi-region writes |
-| **Global distribution** | Turnkey multi-region replication with configurable consistency levels (Strong → Eventual) |
-| **Scalability** | Automatic, instant horizontal partitioning — no shard key required at low scale |
-| **IaC** | Supported via `azurerm_cosmosdb_account` in the AzureRM Terraform provider |
-| **Best for** | Globally distributed workloads, high-throughput transactional systems, real-time AI/vector applications, applications requiring multi-region writes or tunable consistency |
-
-**Cost caution:** RU-based billing can become expensive for read-heavy or scan-heavy workloads. Right-size provisioned throughput and use autoscale. Consider serverless mode for spiky, low-volume workloads.
-
-### Azure DocumentDB
-
-Azure DocumentDB is a separate, fully managed open-source document database with **99.03% MongoDB wire-protocol compatibility**. It is built on the [open-source DocumentDB engine](https://github.com/documentdb/documentdb) (Linux Foundation, MIT licence) — it does not run MongoDB's server code and is not subject to MongoDB's SSPL licence.
-
-| Characteristic | Detail |
-|---|---|
-| **Billing model** | vCore-based — billed by cluster compute tier, not per operation. Predictable cost for sustained workloads. |
-| **Compatibility** | 99.03% MongoDB wire-protocol compatible; works with existing MongoDB drivers, Compass, and mongo shell |
-| **Multi-cloud / hybrid** | Supports cross-cloud and hybrid replication; the open-source engine can run on-premises or on any cloud via Kubernetes operator |
-| **Vector database** | Integrated vector indexing and search at no additional cost |
-| **IaC** | Azure CLI, ARM/Bicep, and Terraform (via `azurerm_documentdb_*` resources as they stabilise; verify current provider support) |
-| **Best for** | Teams migrating existing MongoDB applications to Azure, analytics-oriented document workloads, cost-predictable sustained compute, multi-cloud or hybrid scenarios |
-
-**When to choose DocumentDB over Cosmos DB:** When the workload is MongoDB-native (existing drivers, tooling, schemas), when per-operation RU costs would be prohibitive for the access pattern (e.g., large scans or batch analytics), or when multi-cloud/hybrid portability is a requirement.
-
-### Decision Summary
-
-| Factor | Azure Cosmos DB | Azure DocumentDB |
-|---|---|---|
-| Billing | Per operation (RU/s) | Per vCore compute tier |
-| MongoDB compatibility | Partial (CosmosDB for MongoDB API) | 99.03% wire-protocol |
-| Global multi-region writes | Yes (SLA-backed) | Via open-source replication |
-| Best fit | Cloud-native, globally distributed OLTP | MongoDB migration, analytics, hybrid/multi-cloud |
-| Terraform resource | `azurerm_cosmosdb_account` | `azurerm_documentdb_*` |
-
-<!-- PROJECT: Document which database product is in use and justify the choice against this table -->
-
----
-
 ## Non-Negotiables
 
 These ten rules are non-negotiable regardless of project phase, deadline pressure,
