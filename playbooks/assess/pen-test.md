@@ -61,7 +61,7 @@ This gate governs every active action in the playbook. **Nothing active happens 
 
 ### Step 1 -- Pre-flight environment check (run BEFORE asking the user anything)
 
-Before asking the user a single question, perform a **passive heuristic sweep** of the supplied target(s) and record evidence. Use only passive sources: provided URLs, DNS resolution, public certificate transparency, HTTP response metadata observed on a single unauthenticated request to the landing page, and publicly available WHOIS/RDAP data. **Do not authenticate, do not fuzz, do not crawl, do not run any tooling that generates volume.**
+Before asking the user a single question, perform an **ultra-low-volume heuristic sweep** of the supplied target(s) and record evidence. The sweep is passive wherever possible (provided URLs, DNS resolution, public certificate transparency, publicly available WHOIS/RDAP data) plus **at most one unauthenticated HTTP request to each supplied landing page** to capture response metadata -- this single touch is the only active probe permitted before authorisation, is bounded to a normal browser-equivalent request, and is logged as the first entry in the chain-of-custody. **Do not authenticate, do not fuzz, do not crawl, do not retry, and do not run any tooling that generates volume.**
 
 Score each indicator and combine into a **Production Likelihood Score**.
 
