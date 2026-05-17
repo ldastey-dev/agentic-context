@@ -53,8 +53,9 @@ Combine multiple matches when a task spans domains.
 | assess IaC, infrastructure assessment, terraform audit | `.context/playbooks/assess/iac.md` | Infrastructure as Code maturity assessment |
 | assess observability, monitoring audit, logging assessment | `.context/playbooks/assess/observability.md` | Observability maturity assessment |
 | assess performance, performance audit, scalability review | `.context/playbooks/assess/performance.md` | Performance and resilience assessment |
-| assess security, security audit, threat model, pen test | `.context/playbooks/assess/security.md` | OWASP Top 10 security assessment |
+| assess security, security audit, threat model, owasp top 10 | `.context/playbooks/assess/security.md` | OWASP Top 10 security assessment (lighter-touch triage; for a full CREST engagement see `pen-test.md` below) |
 | assess domain security, DNS audit, subdomain takeover, security headers, HSTS, CSP, WAF, Cloudflare | `.context/playbooks/assess/domain-security.md` | External domain and attack-surface security assessment |
+| crest pen test, penetration test, red team, ethical hacking, bug bounty, exploit chain | `.context/playbooks/assess/pen-test.md` | CREST-aligned penetration test across web, API, infra, cloud, identity, mobile, wireless, social-policy with authorisation gating and non-destructive PoC |
 | assess tech debt, debt inventory, code health | `.context/playbooks/assess/tech-debt.md` | Technical debt identification and prioritisation |
 | assess test coverage, test audit, testing assessment | `.context/playbooks/assess/test-coverage.md` | Testing strategy and coverage assessment |
 
