@@ -129,6 +129,7 @@ The directory layout in this repo is **not** the layout in target repos. The dep
 - `deploy.sh` (bash) and `deploy.ps1` (PowerShell) must stay behaviour-equivalent. A change to one usually needs the matching change in the other.
 - Both must honour the overwrite guard (`--overwrite` / `--no-overwrite`, interactive prompt otherwise).
 - The interactive `--agents` menu must work on macOS, Linux, and Windows PowerShell.
+- **Never run `deploy.sh` or `deploy.ps1` against this repository.** This repo is the source library, not a deploy target. Running the scripts here writes `/AGENTS.md`, `/CLAUDE.md`, `/.context/`, `/.cursor/`, `/.devin/`, `/.windsurfrules`, `/.github/copilot-instructions.md`, `/.claude/`, and `/.github/skills/` at the repo root — the `.gitignore` keeps those out of commits, but they overlay tracked source paths (`core/AGENTS.md` is the tracked source; `/AGENTS.md` is the tracked maintainer guide) and create confusing untracked state. To test a deploy-script change, run it against an empty scratch directory (`mkdir /tmp/agentic-context-test && ./deploy.sh /tmp/agentic-context-test`) or another repo entirely.
 
 ---
 
@@ -170,6 +171,7 @@ Additional rules that apply specifically to maintainers of this template repo:
 
 ## Non-Negotiables
 
+- **Never run `deploy.sh` or `deploy.ps1` against this repository.** Test deploy-script changes in a scratch directory or against another repo. See [Editing deploy scripts](#editing-deploy-scripts) for the reasoning.
 - Never duplicate a standard across files. One canonical home per rule.
 - Never write a standard inside a per-agent redirect file.
 - Never paste playbook text into a skill wrapper — regenerate from frontmatter.
@@ -184,7 +186,7 @@ Before opening a PR, confirm:
 - [ ] No existing file already covers this content (would be duplication).
 - [ ] Prose lives in `standards/`, `playbooks/`, or `core/.context/` — not in a per-agent file.
 - [ ] If a new standard or playbook: added to `core/.context/index.md` and (for standards) the table in `core/AGENTS.md`.
-- [ ] If a deploy script change: both `deploy.sh` and `deploy.ps1` updated.
+- [ ] If a deploy script change: both `deploy.sh` and `deploy.ps1` updated, and tested against a scratch directory — never against this repo.
 - [ ] If a new agent: redirect file added under `core/`, both deploy scripts updated, README table updated.
 - [ ] British English, kebab-case, prescriptive language.
 - [ ] No engagement artefacts or generated deploy outputs in the diff.
