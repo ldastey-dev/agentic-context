@@ -55,6 +55,7 @@ Combine multiple matches when a task spans domains.
 | assess performance, performance audit, scalability review | `.context/playbooks/assess/performance.md` | Performance and resilience assessment |
 | assess security, security audit, threat model, pen test | `.context/playbooks/assess/security.md` | OWASP Top 10 security assessment |
 | assess domain security, DNS audit, subdomain takeover, security headers, HSTS, CSP, WAF, Cloudflare | `.context/playbooks/assess/domain-security.md` | External domain and attack-surface security assessment |
+| crest pen test, penetration test, red team, ethical hacking, bug bounty, exploit chain | `.context/playbooks/assess/pen-test.md` | CREST-aligned penetration test across web, API, infra, cloud, identity, mobile, wireless, social-policy with authorisation gating and non-destructive PoC |
 | assess tech debt, debt inventory, code health | `.context/playbooks/assess/tech-debt.md` | Technical debt identification and prioritisation |
 | assess test coverage, test audit, testing assessment | `.context/playbooks/assess/test-coverage.md` | Testing strategy and coverage assessment |
 
