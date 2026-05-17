@@ -2,7 +2,7 @@
 
 Maintainer-facing guide for working in **this** repository — the source of standards, playbooks, and per-agent configuration templates that `deploy.sh` and `deploy.ps1` distribute into target repositories.
 
-This file is for contributors editing the templates here. It is **not** the `AGENTS.md` that gets shipped to consumers — that template lives at `core/AGENTS.md` and is rewritten into each target repo by the deploy scripts.
+This file is for contributors editing the templates here. It is **not** the `AGENTS.md` that gets shipped to consumers — that template lives at `core/AGENTS.md` and is copied into each target repo by the deploy scripts (the consumer fills in the `[CONFIGURE]` sections; the scripts do not template anything themselves).
 
 ---
 
@@ -63,39 +63,11 @@ Standards use "must", "never", "always". They are not suggestions. Every standar
 
 ---
 
-## Repository Layout
+## Source → Target Layout
 
-```text
-.                                       (this repo — the source library)
-├── AGENTS.md                           THIS FILE — maintainer guide
-├── README.md                           consumer-facing overview and quick start
-├── deploy.sh / deploy.ps1              writers: source → target repo layout
-│
-├── core/                               Tier 1 — always in context (writes to target repo root)
-│   ├── AGENTS.md                       template consumers rename and fill in
-│   ├── CLAUDE.md                       Claude Code redirect → AGENTS.md
-│   ├── .context/
-│   │   ├── index.md                    keyword → file routing table
-│   │   └── conventions/                code, workflow, communication
-│   ├── .claude/settings.json           Claude Code permissions + hook stubs
-│   ├── .cursor/rules/standards.mdc     Cursor redirect → AGENTS.md
-│   ├── .devin/devin.json               Devin config + index pointer
-│   ├── .github/copilot-instructions.md Copilot redirect → AGENTS.md
-│   └── .windsurfrules                  Windsurf redirect → AGENTS.md
-│
-├── standards/                          Tier 3 — reference (writes to target .context/standards/)
-│   └── *.md                            one file per concern
-│
-├── playbooks/                          Tier 2 — on demand (writes to target .context/playbooks/)
-│   ├── assess/   *.md
-│   ├── review/   *.md
-│   ├── plan/     *.md
-│   └── refactor/ *.md
-│
-└── reviews/                            engagement artefacts (git-ignored, kept locally)
-```
+The on-disk tree for this repository is documented in the [Repository Structure section of the README](README.md#repository-structure). Do not duplicate it here.
 
-The directory layout in this repo is **not** the layout in target repos. The deploy scripts remap it:
+The directory layout in this repo is **not** the layout in target repos. The deploy scripts remap source paths to target paths as follows:
 
 | Source here | Target repo path |
 | --- | --- |
@@ -178,23 +150,21 @@ If a change does not fit any row above, it probably does not belong in this repo
 
 ## What Does Not Belong Here
 
-- **Engagement artefacts.** Assessment reports, pen-test write-ups, and review outputs produced *by* using these playbooks against a target codebase. The `.gitignore` already excludes `*-assessment.md`, `*-review.md`, `*-pen-test.md`, `*-security-review.md`, and the `reviews/` directory at any depth.
+- **Engagement artefacts.** Assessment reports, pen-test write-ups, and review outputs produced *by* using these playbooks against a target codebase. Keep them locally under `/engagements/` (git-ignored), alongside any `reviews/` directories (also ignored at any depth).
 - **Deploy outputs.** Anything written to the repo root by `deploy.sh` (e.g. a generated `/AGENTS.md` template copy, `/.context/`, `/.cursor/`, etc.) when this repo is used as its own deploy target for local testing. The `.gitignore` anchors these with leading slashes so they cannot be accidentally committed; `core/<same name>` is the tracked source and is never affected.
 - **Per-agent duplicates of standards.** See Core Design Principle 3.
-- **Local editor or agent settings** beyond what every contributor needs. `.claude/`, `.cursor/`, `.devin/`, `.vscode/` at the repo root are ignored.
+- **Local editor or agent settings** beyond what every contributor needs. `/.claude/`, `/.cursor/`, `/.devin/` at the repo root, and `.vscode/` at any depth, are ignored.
 
 ---
 
 ## Conventions
 
-- **British English** — optimisation, behaviour, colour, organisation.
-- **Kebab-case** — file names.
-- **`## N · Section Title`** — standards heading style with middle-dot separator.
-- **Semantic non-numbered headings** — playbooks (`## Role`, `## Phase 1: Discovery`).
-- **`[CONFIGURE]`** in template headings — marks sections target-repo maintainers must fill in.
-- **`<!-- PROJECT: ... -->`** — inline customisation points in templates.
-- **Prescriptive language** — "must", "never", "always". Standards are not advisory.
-- **SOLID principles in full** — never SRP, OCP, LSP, ISP, DIP.
+The shared writing conventions (British English, kebab-case file names, the `## N · Section Title` standards heading style, semantic playbook headings, `[CONFIGURE]` markers, and `<!-- PROJECT: ... -->` inline customisation points) are documented in the [Conventions section of the README](README.md#conventions). They apply equally to maintainers and consumers — do not restate them here.
+
+Additional rules that apply specifically to maintainers of this template repo:
+
+- **Prescriptive language** — standards must use "must", "never", "always". They are not advisory.
+- **SOLID principles in full** — never SRP, OCP, LSP, ISP, DIP. Spell them out so an agent loading the standard out of context can still understand it.
 
 ---
 
