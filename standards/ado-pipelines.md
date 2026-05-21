@@ -284,6 +284,51 @@ Every Azure DevOps YAML pipeline must be explicit, secure, and reproducible. Tri
 
 ---
 
+## 13 · Build Versioning
+
+### 13.1 · Semantic Versioning Format
+
+- All pipeline version fields (`version:` or `buildVersion:`) must follow `MAJOR.MINOR.PATCH` format.
+- Every code change must increment the version — never leave it unchanged after a change.
+- Versions must always increment, never reset or decrease.
+- Versions must stay in sync across all pipeline YAML files in the repository.
+- If multiple YAML files reference a shared variable file (e.g. `variables.yml`), update the version there instead of in individual files.
+
+### 13.2 · Increment Strategy
+
+- Default to incrementing **PATCH** for most changes — bug fixes and small backwards-compatible modifications.
+- Increment **MINOR** when new features, services, or pipeline stages are added in a backwards-compatible manner.
+- Increment **MAJOR** only when incompatible API or configuration changes are introduced, and only when explicitly signalled via `BREAKING CHANGE:` in the commit message, PR title, or comments.
+- When uncertain whether a change is MINOR or PATCH, always choose PATCH.
+
+| Change | Example | Bump |
+|--------|---------|------|
+| Bug fix or small change | Fix incorrect step condition | `1.2.3 → 1.2.4` |
+| New feature or stage added | Add new deploy stage | `1.2.4 → 1.3.0` |
+| Incompatible breaking change | Remove existing endpoint | `1.3.0 → 2.0.0` |
+
+### 13.3 · Exclusions
+
+- **PosLink** (`dev.azure.com/access-devops/Access%20EPOS/_git/PosLink`): version increments must **never** be applied automatically. PosLink versions must only be changed when explicitly requested by the user.
+
+### 13.4 · Version Bump Commits
+
+- Version bump commits must use the conventional commit format: `type(scope): subject`
+  - `type` must be one of: `build`, `ci`, `docs`, `feat`, `fix`, `perf`, `refactor`, `style`, `test`, `chore`, `revert`
+  - `scope` is optional contextual information (e.g. the feature or pipeline name)
+  - `subject` must be imperative present tense, lowercase, no trailing period
+- Breaking changes must be marked with `!`: `chore!: bump version to x.y.z`
+- Standard version bump commit: `chore: bump version to x.y.z`
+
+```
+chore: bump version to 1.2.4
+chore!: bump version to 2.0.0
+feat: add deployment stage for staging environment
+fix: correct incorrect agent pool selection
+```
+
+---
+
 ## Non-Negotiables
 
 - Secrets must never be hardcoded in YAML — always use Key Vault-linked variable groups.
@@ -294,6 +339,8 @@ Every Azure DevOps YAML pipeline must be explicit, secure, and reproducible. Tri
 - Template references must always point to a versioned ref, never a floating branch.
 - `vmImage` must be pinned to a specific version — never use `ubuntu-latest` in production pipelines.
 - Fork build policies must always prevent secrets from being accessed in forked PR builds.
+- Every code change must increment the pipeline version — never leave it unchanged.
+- PosLink (`dev.azure.com/access-devops/Access%20EPOS/_git/PosLink`) versions must never be auto-incremented — manual only.
 
 ---
 
@@ -314,3 +361,6 @@ Every Azure DevOps YAML pipeline must be explicit, secure, and reproducible. Tri
 - [ ] `maxParallel` is set on matrix jobs to protect agent pool capacity
 - [ ] Protected resources require approval before pipeline access
 - [ ] YAML is validated against the ADO schema before merging
+- [ ] Pipeline version has been incremented according to SemVer rules (PATCH default, MINOR for new features, MAJOR only for explicit breaking changes)
+- [ ] If a shared variable file exists (e.g. `variables.yml`), version is updated there rather than in individual YAML files
+- [ ] PosLink repository has not had its version auto-incremented
