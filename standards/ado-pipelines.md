@@ -307,11 +307,7 @@ Every Azure DevOps YAML pipeline must be explicit, secure, and reproducible. Tri
 | New feature or stage added | Add new deploy stage | `1.2.4 → 1.3.0` |
 | Incompatible breaking change | Remove existing endpoint | `1.3.0 → 2.0.0` |
 
-### 13.3 · Exclusions
-
-- **PosLink** (`dev.azure.com/access-devops/Access%20EPOS/_git/PosLink`): version increments must **never** be applied automatically. PosLink versions must only be changed when explicitly requested by the user.
-
-### 13.4 · Version Bump Commits
+### 13.3 · Version Bump Commits
 
 - Version bump commits must use the conventional commit format: `type(scope): subject`
   - `type` must be one of: `build`, `ci`, `docs`, `feat`, `fix`, `perf`, `refactor`, `style`, `test`, `chore`, `revert`
@@ -340,7 +336,6 @@ fix: correct incorrect agent pool selection
 - `vmImage` must be pinned to a specific version — never use `ubuntu-latest` in production pipelines.
 - Fork build policies must always prevent secrets from being accessed in forked PR builds.
 - Every code change must increment the pipeline version — never leave it unchanged.
-- PosLink (`dev.azure.com/access-devops/Access%20EPOS/_git/PosLink`) versions must never be auto-incremented — manual only.
 
 ---
 
@@ -363,4 +358,3 @@ fix: correct incorrect agent pool selection
 - [ ] YAML is validated against the ADO schema before merging
 - [ ] Pipeline version has been incremented according to SemVer rules (PATCH default, MINOR for new features, MAJOR only for explicit breaking changes)
 - [ ] If a shared variable file exists (e.g. `variables.yml`), version is updated there rather than in individual YAML files
-- [ ] PosLink repository has not had its version auto-incremented
