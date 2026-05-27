@@ -417,7 +417,7 @@ function New-SkillWrapper {
     }
     $lines += @("---", "", "Read and follow ${bt}.context/playbooks/${RelPath}${bt} in full.")
 
-    $content = ($lines -join "`n") + "`n"
+    $content = ($lines -join [Environment]::NewLine) + [Environment]::NewLine
     [System.IO.File]::WriteAllText($skillFile, $content)
 }
 
