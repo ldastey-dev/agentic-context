@@ -163,7 +163,7 @@ function Copy-SingleFile {
     if (-not (Test-Path $parentDir)) {
         New-Item -ItemType Directory -Path $parentDir -Force | Out-Null
     }
-    $ext = [System.IO.Path]::GetExtension($Source).ToLower()
+    $ext = [System.IO.Path]::GetExtension($Source).ToLowerInvariant()
     if ($ext -in $script:TextExtensions) {
         $content = [System.IO.File]::ReadAllText($Source) -replace "`r`n", "`n" -replace "`r", "`n"
         [System.IO.File]::WriteAllText($Destination, $content, (New-Object System.Text.UTF8Encoding($false)))
