@@ -332,12 +332,14 @@ compliance failure. The declaration must cover:
   beacon, advertising script, embedded widget, or SDK that sets storage or
   transmits data to a third party. Name the recipient and link to their
   privacy policy.
-- **LocalStorage / sessionStorage** — any key that stores personal data or is
-  used for tracking. Declare the key, purpose, category, and whether it holds
-  personal data. Consent is required unless the key is **strictly necessary**
-  for a service the user explicitly requested (per the category table below).
-  The strictly-necessary test — not the mere absence of personal data —
-  determines the exemption; strictly-necessary keys must still be documented.
+- **LocalStorage / sessionStorage** — declare **every** key the product sets,
+  with its purpose, category, and whether it holds personal data; keys that
+  store personal data or are used for tracking are the most important to
+  capture but are not the only ones that must be declared. Consent is required
+  unless the key is **strictly necessary** for a service the user explicitly
+  requested (per the category table below). The strictly-necessary test — not
+  the mere absence of personal data — determines the exemption; strictly-
+  necessary keys must still be documented.
 - **Other client-side storage** — IndexedDB and Cache Storage are treated
   identically to cookies.
 - **Device fingerprinting and similar tracking techniques** — fingerprinting
@@ -367,8 +369,12 @@ checks, and consent banner all key off these identifiers, so use them verbatim.
 - The consent banner must offer **granular** choice per category, present
   "reject all" as prominently as "accept all", and use no pre-ticked boxes
   (per §4).
-- Withdrawal must be as easy as granting it and must clear the relevant
-  storage.
+- Withdrawal must be as easy as granting it. On withdrawal, clear the first-
+  party storage you control; for third-party cookies, storage, or tags, stop
+  setting and processing them and invoke any vendor-supported opt-out API.
+  Where deletion is not technically possible (for example HttpOnly cookies, or
+  storage on a third-party domain), document the limitation and give the user
+  clear instructions to remove it.
 - The consent state itself is stored in a strictly necessary mechanism and
   recorded with timestamp, version, and scope (per §4).
 
@@ -393,7 +399,7 @@ declarations stay consistent across teams and tools:
 | `providerName` | The legal entity that controls the entry (omit or set to the organisation's own name for first-party). |
 | `providerPolicy` | URL of the provider's privacy policy. Required when `providerType` is `third-party`. |
 | `personalData` | Boolean — whether the entry holds or derives personal data. |
-| `expiry` | An ISO 8601 duration (e.g. `P2Y`, `P30D`) for a fixed lifetime, or the literal `session` for cleared-on-session-end. Use `P0D` only where a mechanism truly never expires. |
+| `expiry` | For cookies, either an ISO 8601 duration (e.g. `P2Y`, `P30D`) for a fixed lifetime or the literal `session` for cleared-on-session-end. For storage with no browser-enforced expiry (localStorage, IndexedDB, Cache Storage), use the literal `persistent`. |
 
 ```json
 {
@@ -428,7 +434,7 @@ declarations stay consistent across teams and tools:
       "providerType": "first-party",
       "providerName": "Example Ltd",
       "personalData": false,
-      "expiry": "P0D"
+      "expiry": "persistent"
     }
   ]
 }
