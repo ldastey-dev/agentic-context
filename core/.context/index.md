@@ -22,7 +22,7 @@ Combine multiple matches when a task spans domains.
 | API, REST, endpoint, OpenAPI, error response | `.context/standards/api-design.md` | OpenAPI 3+, REST, RFC 7807 errors |
 | AWS, well-architected, cloud, pillar | `.context/standards/aws-well-architected.md` | 6 pillars: OpEx, Security, Reliability, Perf, Cost, Sustainability |
 | Azure, well-architected, cloud, pillar, AKS, Cosmos DB, Entra ID, Key Vault | `.context/standards/azure-well-architected.md` | 5 pillars: Reliability, Security, Cost, OpEx, Performance |
-| GDPR, data protection, privacy, consent, subject rights | `.context/standards/gdpr.md` | Lawful basis, data minimisation, subject rights |
+| GDPR, data protection, privacy, consent, subject rights, cookies, cookie policy, tracking, localStorage, ePrivacy | `.context/standards/gdpr.md` | Lawful basis, data minimisation, subject rights, cookie declaration |
 | PCI, DSS, payment, cardholder, card data | `.context/standards/pci-dss.md` | CDE scoping, AES-256, TLS 1.2+ |
 | accessibility, a11y, WCAG, ARIA, screen reader, keyboard | `.context/standards/accessibility.md` | WCAG 2.2 AA, keyboard, ARIA, contrast |
 | architecture, clean architecture, layers, dependency direction, domain | `.context/standards/architecture.md` | Clean Architecture, layer boundaries, dependency inversion |

@@ -314,6 +314,111 @@ triggers:
 
 ---
 
+## 12 · Cookies & Tracking Technologies
+
+Cookies and equivalent client-side storage are regulated under the ePrivacy
+Directive — and national implementations such as the UK PECR — in addition to
+GDPR. Consent for non-essential storage is required **before** the technology
+is set, and the GDPR consent standards in §4 apply in full.
+
+### Declaration Requirements
+
+Every cookie, script, and client-side storage mechanism the product sets must
+be declared. A declaration that omits anything the product actually sets is a
+compliance failure. The declaration must cover:
+
+- **First-party cookies** — name, purpose, category, and expiry.
+- **Third-party scripts and cookies** — every external tag, pixel, analytics
+  beacon, advertising script, embedded widget, or SDK that sets storage or
+  transmits data to a third party. Name the recipient and link to their
+  privacy policy.
+- **LocalStorage / sessionStorage** — any key that stores personal data or is
+  used for tracking. Declare the key, purpose, category, and whether it holds
+  personal data. Storage used purely for stateless UI preferences that hold
+  no personal data is exempt from consent but must still be documented.
+- **Other client-side storage** — IndexedDB, Cache Storage, and device-
+  fingerprinting techniques are treated identically to cookies.
+
+### Categories
+
+Classify every entry into one of the following. Only **strictly necessary**
+entries may be set without prior consent.
+
+| Category | Consent required | Examples |
+|---|---|---|
+| **Strictly necessary** | No (exempt) | Session authentication, load balancing, CSRF tokens, consent-state storage |
+| **Functional / preferences** | Yes | Language, theme, region, accessibility settings (when not strictly necessary) |
+| **Analytics / performance** | Yes | Usage analytics, A/B testing, heatmaps, error monitoring with identifiers |
+| **Advertising / targeting** | Yes | Ad personalisation, retargeting pixels, cross-site tracking |
+
+### Consent Gating
+
+- Non-essential cookies, scripts, and storage must **not** be set until the
+  user has given consent for the matching category. No pre-loading of third-
+  party tags before consent.
+- The consent banner must offer **granular** choice per category, present
+  "reject all" as prominently as "accept all", and use no pre-ticked boxes
+  (per §4).
+- Withdrawal must be as easy as granting it and must clear the relevant
+  storage.
+- The consent state itself is stored in a strictly necessary mechanism and
+  recorded with timestamp, version, and scope (per §4).
+
+### Machine-Readable Declaration (JSON Config)
+
+Cookie declarations must be maintained as a single source-of-truth JSON config
+that drives the consent banner, the public cookie policy, and automated
+compliance checks. A hand-maintained prose policy drifts from reality and must
+not be the only declaration. The SDK supports granular declaration through
+this config; each entry specifies at minimum its identifier, type, category,
+purpose, provider, whether it holds personal data, and expiry.
+
+```json
+{
+  "version": "2026-06-01",
+  "cookies": [
+    {
+      "name": "session_id",
+      "type": "cookie",
+      "category": "strictly-necessary",
+      "purpose": "Maintains the authenticated session.",
+      "provider": "first-party",
+      "personalData": true,
+      "expiry": "session"
+    },
+    {
+      "name": "_ga",
+      "type": "cookie",
+      "category": "analytics",
+      "purpose": "Distinguishes users for Google Analytics.",
+      "provider": "Google LLC",
+      "providerPolicy": "https://policies.google.com/privacy",
+      "personalData": true,
+      "expiry": "P2Y"
+    },
+    {
+      "name": "ui.theme",
+      "type": "localStorage",
+      "category": "functional",
+      "purpose": "Stores the selected colour theme.",
+      "provider": "first-party",
+      "personalData": false,
+      "expiry": "persistent"
+    }
+  ]
+}
+```
+
+- The config is versioned. A change to categories or scope invalidates prior
+  consent and triggers re-consent (per §4).
+- CI must verify the declaration against the cookies and storage actually set
+  at runtime. An undeclared cookie or storage key detected in CI fails the
+  build.
+- Third-party scripts must be inventoried in the config even when they set
+  storage the application does not control directly.
+
+---
+
 ## Non-Negotiables
 
 | # | Rule |
@@ -325,6 +430,8 @@ triggers:
 | 5 | **No cross-border transfer without a lawful mechanism.** Adequacy decision, SCCs, or BCRs must be in place and documented. |
 | 6 | **No consent dark patterns.** Pre-ticked boxes, confusing language, and bundled consent are forbidden. |
 | 7 | **DSAR capability is not optional.** The system must be able to fulfil any data subject right within 30 days without requiring bespoke engineering effort per request. |
+| 8 | **No undeclared cookies or client-side storage.** Every cookie, third-party script, and storage key the product sets must appear in the JSON cookie declaration. |
+| 9 | **No non-essential storage before consent.** Functional, analytics, and advertising cookies, scripts, and storage must not be set until consent for that category is given. |
 
 ---
 
@@ -350,3 +457,8 @@ Before merging any change that touches personal data:
 - [ ] **Test data** — tests use synthetic data, not production personal data
 - [ ] **Third parties** — any new data sharing has a DPA in place and a
       documented transfer mechanism if cross-border
+- [ ] **Cookies** — every cookie, third-party script, and LocalStorage/
+      sessionStorage key the change introduces is added to the JSON cookie
+      declaration with category, purpose, provider, and expiry
+- [ ] **Consent gating** — non-essential cookies, scripts, and storage are
+      not set before consent for the matching category is granted

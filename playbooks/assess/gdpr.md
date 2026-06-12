@@ -1,7 +1,7 @@
 ---
 name: assess-gdpr
-description: "Run GDPR compliance assessment covering data protection principles, data subject rights, privacy by design, and international transfers"
-keywords: [assess gdpr, data protection audit, privacy assessment, regulatory compliance]
+description: "Run GDPR compliance assessment covering data protection principles, data subject rights, privacy by design, cookies and tracking, and international transfers"
+keywords: [assess gdpr, data protection audit, privacy assessment, regulatory compliance, cookie policy audit, cookie consent assessment]
 ---
 
 # GDPR Compliance Assessment
@@ -39,6 +39,7 @@ Before assessing anything, build regulatory context. Investigate and document:
 - **Lawful basis register** -- for each processing activity, what is the lawful basis? Consent, contract, legitimate interest, legal obligation?
 - **Third-party processors** -- which external services receive personal data? Do they have DPAs and appropriate certifications?
 - **Consent mechanisms** -- how is consent collected, recorded, and withdrawn? Is it granular and freely given?
+- **Cookies and tracking technologies** -- what cookies, third-party scripts, pixels, and LocalStorage/sessionStorage keys does the product set? Is there a complete declaration, and is it maintained as a machine-readable config? Are non-essential technologies gated behind consent?
 - **Data subject rights** -- can the application fulfil access, deletion, portability, and rectification requests?
 - **Retention policies** -- how long is data kept? Is there automated deletion? Are retention periods documented and justified?
 - **Cross-border transfers** -- does personal data leave the EEA/UK? What safeguards are in place?
@@ -93,6 +94,16 @@ Evaluate the application against the GDPR requirements defined in `standards/gdp
 | Transfer mechanisms | Verify appropriate safeguards per `standards/gdpr.md` §6: adequacy decision, SCCs, BCRs, or derogation. |
 | Sub-processor management | Verify sub-processor list, DPAs, and change notification processes per `standards/gdpr.md` §6. |
 | Transfer impact assessment | Verify risk assessment for transfers to countries without adequacy decisions per `standards/gdpr.md` §6. |
+
+### 2.5 Cookies & Tracking Technologies (ePrivacy / PECR)
+
+| Aspect | What to evaluate |
+|---|---|
+| Declaration completeness | Enumerate every cookie, third-party script, pixel, and LocalStorage/sessionStorage key the product sets. Verify each is declared per `standards/gdpr.md` §12. Flag any undeclared storage as a finding. |
+| Categorisation | Verify each entry is classified (strictly necessary, functional, analytics, advertising) and that only strictly necessary entries are set without consent, per `standards/gdpr.md` §12. |
+| Consent gating | Verify non-essential cookies, scripts, and storage are not set before consent for the matching category, and that the banner offers granular choice with no pre-ticked boxes, per `standards/gdpr.md` §12. |
+| Machine-readable config | Verify a versioned JSON declaration exists, drives the banner and public policy, and is reconciled against runtime behaviour in CI, per `standards/gdpr.md` §12. |
+| Third-party scripts | Verify every external tag or SDK that sets storage or transmits data is inventoried with a named recipient and privacy policy link, per `standards/gdpr.md` §12. |
 
 ---
 
