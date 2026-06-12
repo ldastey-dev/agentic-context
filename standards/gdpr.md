@@ -338,8 +338,12 @@ compliance failure. The declaration must cover:
   for a service the user explicitly requested (per the category table below).
   The strictly-necessary test — not the mere absence of personal data —
   determines the exemption; strictly-necessary keys must still be documented.
-- **Other client-side storage** — IndexedDB, Cache Storage, and device-
-  fingerprinting techniques are treated identically to cookies.
+- **Other client-side storage** — IndexedDB and Cache Storage are treated
+  identically to cookies.
+- **Device fingerprinting and similar tracking techniques** — fingerprinting
+  is not a storage mechanism, but reading or combining device/browser
+  characteristics to identify or track a user is subject to the same consent
+  gating and declaration requirements as stored identifiers.
 
 ### Categories
 
@@ -376,8 +380,20 @@ Its scope is **all** tracking technologies — cookies, other client-side storag
 (LocalStorage/sessionStorage, IndexedDB, Cache Storage), and third-party tags —
 not cookies alone. A hand-maintained prose policy drifts from reality and must
 not be the only declaration. The SDK supports granular declaration through this
-config; each entry specifies at minimum its identifier, type, category, purpose,
-provider, whether it holds personal data, and expiry.
+config. Each entry uses the following fields, with the allowed values fixed so
+declarations stay consistent across teams and tools:
+
+| Field | Allowed values |
+|---|---|
+| `name` | The identifier as set (cookie name, storage key, or tag identifier). |
+| `type` | One of `cookie`, `localStorage`, `sessionStorage`, `indexedDB`, `cacheStorage`, `script`, `pixel`, `fingerprint`. |
+| `category` | A Category ID from the table above (`strictly-necessary`, `functional`, `analytics`, `advertising`). |
+| `purpose` | Free-text description of why the entry is set. |
+| `providerType` | Either `first-party` or `third-party`. |
+| `providerName` | The legal entity that controls the entry (omit or set to the organisation's own name for first-party). |
+| `providerPolicy` | URL of the provider's privacy policy. Required when `providerType` is `third-party`. |
+| `personalData` | Boolean — whether the entry holds or derives personal data. |
+| `expiry` | An ISO 8601 duration (e.g. `P2Y`, `P30D`) for a fixed lifetime, or the literal `session` for cleared-on-session-end. Use `P0D` only where a mechanism truly never expires. |
 
 ```json
 {
@@ -388,7 +404,8 @@ provider, whether it holds personal data, and expiry.
       "type": "cookie",
       "category": "strictly-necessary",
       "purpose": "Maintains the authenticated session.",
-      "provider": "first-party",
+      "providerType": "first-party",
+      "providerName": "Example Ltd",
       "personalData": true,
       "expiry": "session"
     },
@@ -397,7 +414,8 @@ provider, whether it holds personal data, and expiry.
       "type": "cookie",
       "category": "analytics",
       "purpose": "Distinguishes users for Google Analytics.",
-      "provider": "Google LLC",
+      "providerType": "third-party",
+      "providerName": "Google LLC",
       "providerPolicy": "https://policies.google.com/privacy",
       "personalData": true,
       "expiry": "P2Y"
@@ -407,9 +425,10 @@ provider, whether it holds personal data, and expiry.
       "type": "localStorage",
       "category": "functional",
       "purpose": "Stores the selected colour theme.",
-      "provider": "first-party",
+      "providerType": "first-party",
+      "providerName": "Example Ltd",
       "personalData": false,
-      "expiry": "persistent"
+      "expiry": "P0D"
     }
   ]
 }
@@ -436,7 +455,7 @@ provider, whether it holds personal data, and expiry.
 | 5 | **No cross-border transfer without a lawful mechanism.** Adequacy decision, SCCs, or BCRs must be in place and documented. |
 | 6 | **No consent dark patterns.** Pre-ticked boxes, confusing language, and bundled consent are forbidden. |
 | 7 | **DSAR capability is not optional.** The system must be able to fulfil any data subject right within 30 days without requiring bespoke engineering effort per request. |
-| 8 | **No undeclared cookies or client-side storage.** Every cookie, third-party script, and storage key the product sets must appear in the JSON cookie declaration. |
+| 8 | **No undeclared cookies or client-side storage.** Every cookie, third-party script, and storage key the product sets must appear in the JSON tracking declaration. |
 | 9 | **No non-essential storage before consent.** Functional, analytics, and advertising cookies, scripts, and storage must not be set until consent for that category is given. |
 
 ---
@@ -464,7 +483,7 @@ Before merging any change that touches personal data:
 - [ ] **Third parties** — any new data sharing has a DPA in place and a
       documented transfer mechanism if cross-border
 - [ ] **Cookies** — every cookie, third-party script, and LocalStorage/
-      sessionStorage key the change introduces is added to the JSON cookie
+      sessionStorage key the change introduces is added to the JSON tracking
       declaration with category, purpose, provider, and expiry
 - [ ] **Consent gating** — non-essential cookies, scripts, and storage are
       not set before consent for the matching category is granted
