@@ -334,22 +334,26 @@ compliance failure. The declaration must cover:
   privacy policy.
 - **LocalStorage / sessionStorage** — any key that stores personal data or is
   used for tracking. Declare the key, purpose, category, and whether it holds
-  personal data. Storage used purely for stateless UI preferences that hold
-  no personal data is exempt from consent but must still be documented.
+  personal data. Consent is required unless the key is **strictly necessary**
+  for a service the user explicitly requested (per the category table below).
+  The strictly-necessary test — not the mere absence of personal data —
+  determines the exemption; strictly-necessary keys must still be documented.
 - **Other client-side storage** — IndexedDB, Cache Storage, and device-
   fingerprinting techniques are treated identically to cookies.
 
 ### Categories
 
 Classify every entry into one of the following. Only **strictly necessary**
-entries may be set without prior consent.
+entries may be set without prior consent. The **Category ID** is the canonical
+enum value used in the `category` field of the JSON config below — the SDK, CI
+checks, and consent banner all key off these identifiers, so use them verbatim.
 
-| Category | Consent required | Examples |
-|---|---|---|
-| **Strictly necessary** | No (exempt) | Session authentication, load balancing, CSRF tokens, consent-state storage |
-| **Functional / preferences** | Yes | Language, theme, region, accessibility settings (when not strictly necessary) |
-| **Analytics / performance** | Yes | Usage analytics, A/B testing, heatmaps, error monitoring with identifiers |
-| **Advertising / targeting** | Yes | Ad personalisation, retargeting pixels, cross-site tracking |
+| Category | Category ID (JSON) | Consent required | Examples |
+|---|---|---|---|
+| Strictly necessary | `strictly-necessary` | No (exempt) | Session authentication, load balancing, CSRF tokens, consent-state storage |
+| Functional / preferences | `functional` | Yes | Language, theme, region, accessibility settings (when not strictly necessary) |
+| Analytics / performance | `analytics` | Yes | Usage analytics, A/B testing, heatmaps, error monitoring with identifiers |
+| Advertising / targeting | `advertising` | Yes | Ad personalisation, retargeting pixels, cross-site tracking |
 
 ### Consent Gating
 
@@ -366,17 +370,19 @@ entries may be set without prior consent.
 
 ### Machine-Readable Declaration (JSON Config)
 
-Cookie declarations must be maintained as a single source-of-truth JSON config
-that drives the consent banner, the public cookie policy, and automated
-compliance checks. A hand-maintained prose policy drifts from reality and must
-not be the only declaration. The SDK supports granular declaration through
-this config; each entry specifies at minimum its identifier, type, category,
-purpose, provider, whether it holds personal data, and expiry.
+The declaration must be maintained as a single source-of-truth JSON config that
+drives the consent banner, the public policy, and automated compliance checks.
+Its scope is **all** tracking technologies — cookies, other client-side storage
+(LocalStorage/sessionStorage, IndexedDB, Cache Storage), and third-party tags —
+not cookies alone. A hand-maintained prose policy drifts from reality and must
+not be the only declaration. The SDK supports granular declaration through this
+config; each entry specifies at minimum its identifier, type, category, purpose,
+provider, whether it holds personal data, and expiry.
 
 ```json
 {
   "version": "2026-06-01",
-  "cookies": [
+  "entries": [
     {
       "name": "session_id",
       "type": "cookie",
@@ -411,9 +417,9 @@ purpose, provider, whether it holds personal data, and expiry.
 
 - The config is versioned. A change to categories or scope invalidates prior
   consent and triggers re-consent (per §4).
-- CI must verify the declaration against the cookies and storage actually set
-  at runtime. An undeclared cookie or storage key detected in CI fails the
-  build.
+- CI must verify the declaration against the cookies, storage, and tags
+  actually set at runtime. An undeclared cookie, storage key, or third-party
+  tag detected in CI fails the build.
 - Third-party scripts must be inventoried in the config even when they set
   storage the application does not control directly.
 
