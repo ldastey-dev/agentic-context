@@ -533,18 +533,18 @@ This opens the Playwright Inspector for interactive step-through with live locat
 
 ## 25 · Non-Negotiables
 
-| Rule                                    | Detail                                                                            |
-| --------------------------------------- | --------------------------------------------------------------------------------- |
-| No unit tests                           | This repository is exclusively for E2E tests. No exceptions.                      |
-| No `test.skip()` or `test.fixme()`      | Never skip tests to hide failures.                                                |
-| No weakened assertions                  | Never change `toEqual` to `toContain` to pass a failing test.                     |
-| No `waitForTimeout()`                   | Use Playwright's built-in auto-waiting and explicit `waitFor` conditions.         |
-| No fabricated selectors                 | Every selector must trace back to a real, verifiable source.                      |
-| No positional selectors                 | Never use `.first()`, `.nth()` to disambiguate duplicates — scope to a container. |
-| No hardcoded credentials                | Use fixtures, environment variables, or ADO Variable Groups.                      |
-| No duplicate page objects               | Search existing `pages/` directory before creating anything new.                  |
-| No inline `process.env` in constructors | Read environment variables into module-scoped constants.                          |
-| Always clean up test data               | Use `afterEach` hooks with `Reservation.cancel()` to prevent orphan bookings.     |
+| Rule | Detail |
+| ---- | ------ |
+| No unit tests | This repository is exclusively for E2E tests. No exceptions. |
+| No `test.skip()` or `test.fixme()` | Never skip tests to hide failures. |
+| No weakened assertions | Never change `toEqual` to `toContain` to pass a failing test. |
+| No `waitForTimeout()` | Use Playwright's built-in auto-waiting and explicit `waitFor` conditions. |
+| No fabricated selectors | Every selector must trace back to a real, verifiable source. |
+| No positional selectors | Never use `.first()`, `.nth()` to disambiguate duplicates — scope to a container. |
+| No hardcoded credentials | Use fixtures, environment variables, or ADO Variable Groups. |
+| No duplicate page objects | Search existing `pages/` directory before creating anything new. |
+| No inline `process.env` in constructors | Read environment variables into module-scoped constants. |
+| Always clean up test data | Use `afterEach` hooks with `Reservation.cancel()` to prevent orphan bookings. |
 
 ---
 
