@@ -125,38 +125,38 @@ The following standards are non-negotiable. Do not weaken them. Detailed guidanc
 
 ### Domain Standards
 
-| Standard      | Key Rule                                                           | Detail                                         |
-| ------------- | ------------------------------------------------------------------ | ---------------------------------------------- |
-| Code Quality  | SOLID, DRY, cyclomatic complexity < 10                             | `.context/standards/code-quality.md`           |
-| Security      | OWASP Top 10 compliance                                            | `.context/standards/security.md`               |
-| Testing       | >= 90% coverage, Test Trophy Model                                 | `.context/standards/testing.md`                |
-| CI/CD         | 7-stage pipeline, < 10 min full CI                                 | `.context/standards/ci-cd.md`                  |
-| Observability | OpenTelemetry, structured JSON logging                             | `.context/standards/observability.md`          |
-| Resilience    | Circuit breakers, retries with backoff                             | `.context/standards/resilience.md`             |
-| Performance   | No N+1, pagination, resource disposal                              | `.context/standards/performance.md`            |
-| Cost          | Cache before network, FinOps principles                            | `.context/standards/cost-optimisation.md`      |
-| Operations    | IaC, env vars, small focused PRs                                   | `.context/standards/operational-excellence.md` |
-| API Design    | OpenAPI 3+, REST, RFC 7807 errors                                  | `.context/standards/api-design.md`             |
-| AWS           | 6 pillars: OpEx, Security, Reliability, Perf, Cost, Sustainability | `.context/standards/aws-well-architected.md`   |
-| Azure         | 5 pillars: Reliability, Security, Cost, OpEx, Performance          | `.context/standards/azure-well-architected.md` |
-| GDPR          | Lawful basis, data minimisation, subject rights                    | `.context/standards/gdpr.md`                   |
-| PCI DSS       | CDE scoping, AES-256, TLS 1.2+                                     | `.context/standards/pci-dss.md`                |
-| Accessibility | WCAG 2.2 AA, keyboard, ARIA, contrast                              | `.context/standards/accessibility.md`          |
-| Architecture  | Clean Architecture, dependency direction, layer boundaries         | `.context/standards/architecture.md`           |
-| IaC           | State management, drift detection, container security              | `.context/standards/iac.md`                    |
-| Tech Debt     | Debt taxonomy, impact scoring, paydown strategy                    | `.context/standards/tech-debt.md`              |
+| Standard | Key Rule | Detail |
+| --- | --- | --- |
+| Code Quality | SOLID, DRY, cyclomatic complexity < 10 | `.context/standards/code-quality.md` |
+| Security | OWASP Top 10 compliance | `.context/standards/security.md` |
+| Testing | >= 90% coverage, Test Trophy Model | `.context/standards/testing.md` |
+| CI/CD | 7-stage pipeline, < 10 min full CI | `.context/standards/ci-cd.md` |
+| Observability | OpenTelemetry, structured JSON logging | `.context/standards/observability.md` |
+| Resilience | Circuit breakers, retries with backoff | `.context/standards/resilience.md` |
+| Performance | No N+1, pagination, resource disposal | `.context/standards/performance.md` |
+| Cost | Cache before network, FinOps principles | `.context/standards/cost-optimisation.md` |
+| Operations | IaC, env vars, small focused PRs | `.context/standards/operational-excellence.md` |
+| API Design | OpenAPI 3+, REST, RFC 7807 errors | `.context/standards/api-design.md` |
+| AWS | 6 pillars: OpEx, Security, Reliability, Perf, Cost, Sustainability | `.context/standards/aws-well-architected.md` |
+| Azure | 5 pillars: Reliability, Security, Cost, OpEx, Performance | `.context/standards/azure-well-architected.md` |
+| GDPR | Lawful basis, data minimisation, subject rights | `.context/standards/gdpr.md` |
+| PCI DSS | CDE scoping, AES-256, TLS 1.2+ | `.context/standards/pci-dss.md` |
+| Accessibility | WCAG 2.2 AA, keyboard, ARIA, contrast | `.context/standards/accessibility.md` |
+| Architecture | Clean Architecture, dependency direction, layer boundaries | `.context/standards/architecture.md` |
+| IaC | State management, drift detection, container security | `.context/standards/iac.md` |
+| Tech Debt | Debt taxonomy, impact scoring, paydown strategy | `.context/standards/tech-debt.md` |
 
 ### Technology Standards
 
-| Standard      | Key Rule                                         | Detail                                |
-| ------------- | ------------------------------------------------ | ------------------------------------- |
-| .NET          | C#, ASP.NET Core, EF Core, async patterns        | `.context/standards/dotnet.md`        |
-| React         | Component architecture, hooks, Testing Library   | `.context/standards/react.md`         |
-| SQL Server    | Schema design, migrations, Azure SQL             | `.context/standards/mssql.md`         |
-| PowerShell    | Verb-Noun, parameters, Pester, Az module         | `.context/standards/powershell.md`    |
-| Terraform     | File layout, modules, tflint, Terratest          | `.context/standards/terraform.md`     |
-| ADO Pipelines | Triggers, templates, environments, approvals     | `.context/standards/ado-pipelines.md` |
-| Docker        | Multi-stage builds, layer optimisation, scanning | `.context/standards/docker.md`        |
+| Standard | Key Rule | Detail |
+| --- | --- | --- |
+| .NET | C#, ASP.NET Core, EF Core, async patterns | `.context/standards/dotnet.md` |
+| React | Component architecture, hooks, Testing Library | `.context/standards/react.md` |
+| SQL Server | Schema design, migrations, Azure SQL | `.context/standards/mssql.md` |
+| PowerShell | Verb-Noun, parameters, Pester, Az module | `.context/standards/powershell.md` |
+| Terraform | File layout, modules, tflint, Terratest | `.context/standards/terraform.md` |
+| ADO Pipelines | Triggers, templates, environments, approvals | `.context/standards/ado-pipelines.md` |
+| Docker | Multi-stage builds, layer optimisation, scanning | `.context/standards/docker.md` |
 | Playwright    | E2E only, POM mandatory, no fabricated selectors | `.context/standards/playwright.md`    |
 
 ---
