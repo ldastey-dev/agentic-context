@@ -14,7 +14,7 @@ If the Playwright project is exclusively for end-to-end Playwright tests, never 
 
 - **Never** add `test.skip()` or `test.fixme()` as a resolution to a failing test.
 - **Never** weaken assertions (e.g., changing `toEqual` to `toContain`) to make a test pass.
-- **Never** add arbitrary `waitForTimeout()` calls. User Playwright's built-in auto-waiting with `expect` assertions where possible, and if necessary use the proper `waitFor` conditions preferentially over `waitForTimeout()`.
+- **Never** add arbitrary `waitForTimeout()` calls. Use Playwright's built-in auto-waiting with `expect` assertions where possible, and if necessary use the proper `waitFor` conditions preferentially over `waitForTimeout()`.
 - **Never** increase timeout values arbitrarily.
 - If a fix cannot be determined, **stop and report** the failure with details — do not modify the test to make it pass.
 - Treat failing tests as potential application bugs until proven otherwise.
@@ -48,14 +48,14 @@ Before creating any new page object or test, search the existing page objects di
 
 ## 6. Adhere to Page Object Model
 
-This rule applies only **if** the project uses Page Object Model. Whether the project uses a Page Object Model is determined by the project's existing codebase and conventions, or if specified in the README. If it is unclear from the README or existing codebase, **check with a human** and add this information to the README for future reference.If the project does not use a Page Object Model, the following rule does not apply.
+This rule applies only **if** the project uses Page Object Model. Whether the project uses a Page Object Model is determined by the project's existing codebase and conventions, or if specified in the README. If it is unclear from the README or existing codebase, **check with a human** and add this information to the README for future reference. If the project does not use a Page Object Model, the following rule does not apply.
 
 All UI interactions must go through Page Object classes. Do not put raw locators or page interaction logic directly in test files.
 
 - Use a private `locators` object for all selectors.
 - Prefer semantic selectors (`getByRole`, `getByText`, `getByLabel`) over CSS selectors.
 - Use stable test-specific attributes (e.g. `data-testid` or similar) when available.
-- For tabbed UIs / duplicate-DOM situations, use XPath selectors scoped to a known container ID. Never use positional selectors (`.first()`, `.nth()`) to disambiguate duplicates.
+- For tabbed UIs / duplicate-DOM situations, you may where necessary use XPath selectors scoped to a known container ID. Never use positional selectors (`.first()`, `.nth()`) to disambiguate duplicates.
 
 ---
 
@@ -109,7 +109,6 @@ When debugging failing tests:
 
 - Debug one test at a time — never batch-debug multiple failures.
 - Stop after 2 failed fix attempts on the same test and escalate.
-- Only attach `test.trace` from trace ZIPs — exclude other trace files.
 
 ---
 
