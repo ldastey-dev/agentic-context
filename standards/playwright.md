@@ -135,7 +135,7 @@ private readonly saveButton = this.page.getByRole('button', { name: 'Save' }).nt
 ### 7.1 · Import Sources
 
 - Primary: `fixtures/index.ts` — the main fixture composition combining all fixture modules.
-- Legacy/Enhanced: `fixtures/enhancedFixtures.ts` — provides `test`, `authTest`, `adminTest`, `widgetTest`.
+- Legacy/Enhanced: `fixtures/enhancedFixtures.ts` — provides `test`, `authTest`, `adminTest`, `widgetTest`, `performanceTest`.
 
 ### 7.2 · Available Fixture Modules
 
