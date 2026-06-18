@@ -63,7 +63,7 @@ All UI interactions must go through Page Object classes. Do not put raw locators
 
 ```typescript
 import { BasePage } from "@pages/base";
-import { type Locator, type Page, expect } from "@playwright/test";
+import { type Locator, type Page } from "@playwright/test";
 
 export class ExamplePage extends BasePage {
   private readonly submitButton: Locator;
@@ -250,7 +250,7 @@ try {
 
 ### 10.3 · Rules
 
-- Always release locks in `afterAll` or `afterEach`.
+- Always release locks in a `finally` block (preferred), or in `afterAll`/`afterEach` if the lock was acquired in a hook.
 - Ensure enough resource slots exist for the maximum shard/worker count.
 - When running with sharding (`SHARD_INDEX` / `SHARD_TOTAL`), slots should be partitioned across shards to prevent cross-shard collisions.
 
