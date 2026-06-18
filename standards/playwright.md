@@ -1,6 +1,6 @@
-# ResDiary-QAPlaywright Standards — Playwright E2E Testing
+# Playwright E2E Testing Standards
 
-Coding standards for AI agents working in the [ResDiary-QAPlaywright](https://github.com/ResDiary/ResDiary-QAPlaywright) repository. All rules are derived from the actual codebase conventions, existing rule files, and project knowledge.
+Coding standards for AI agents working in Playwright end-to-end test repositories. All rules are general best practices derived from real-world codebase conventions, existing rule files, and project knowledge.
 
 ---
 
@@ -41,20 +41,21 @@ If a selector or pattern cannot be traced, **stop and report** with the search t
 
 ---
 
-## 5 · Page Object Model (Mandatory)
+## 5 · Page Object Model (Conditional)
+
+> **Applicability:** This rule applies only **if** the project uses Page Object Model. Whether the project uses a Page Object Model is determined by the project's existing codebase and conventions, or if specified in the README. If it is unclear from the README or existing codebase, **check with a human** and add this information to the README for future reference. If the project does not use a Page Object Model, the following rule does not apply.
 
 All UI interactions must go through Page Object classes. Do not put raw locators or page interaction logic directly in test files.
 
 ### 5.1 · Base Class
 
-- Page objects must extend `BasePage` from `pages/base/BasePage.ts`.
-- Constructor must call `super(page)` — `pageTitle` and `pageUrl` are optional.
-- `BasePage` provides common utilities: `clickElement()`, `fillText()`, `selectDropdown()`, `isElementVisible()`, `getElementText()`, `waitForElementToBeStable()`, `navigateTo()`, `waitForPageLoad()`.
+- Page objects must extend the project's base page class (e.g. `BasePage`).
+- Constructor must call the parent constructor.
+- The base class typically provides common utilities: click, fill, select, visibility checks, navigation, and wait helpers.
 
 ### 5.2 · Structure
 
-- One page object per file, located at `pages/[application]/[pagename].page.ts`.
-- Applications: `resdiaryFull`, `accessEvo`, `devHub`, `dishCult`, `resdiaryMobile`, `reserveWithGoogle`.
+- One page object per file, located in a `pages/` directory organised by application area.
 - Use `private readonly` fields for all locators (Playwright `Locator` type initialised in the constructor).
 - Methods represent user actions or verifications, with proper TypeScript typing and explicit return types.
 
@@ -97,18 +98,18 @@ Before creating any new page object, search the existing `pages/` directory for 
 Prefer Playwright's built-in semantic locators:
 
 - `getByRole('button', { name: 'Save' })`
-- `getByText('Confirm Booking')`
+- `getByText('Confirm')`
 - `getByLabel('Email')`
-- `getByTestId('booking-panel')` — maps to `data-at` attribute (configured in `playwright.config.ts` as `testIdAttribute: 'data-at'`).
+- `getByTestId('panel-id')` — maps to the project's configured `testIdAttribute` in `playwright.config.ts`.
 
-### 6.2 · Tabbed / Panelled UIs (Default in ResDiary)
+### 6.2 · Tabbed / Panelled UIs
 
-ResDiary's admin interface uses tabbed and panelled layouts where the same element text appears in multiple panels. For these UIs, XPath scoped to container IDs is **required**:
+Applications with tabbed or panelled layouts often render the same element text in multiple panels. For these UIs, XPath scoped to container IDs is **required**:
 
 ```typescript
 // ✅ Correct — scoped to a specific panel
 private readonly saveButton = this.page.locator(
-  'xpath=//*[@id="booking-details-panel"]//button[text()="Save"]'
+  'xpath=//*[@id="details-panel"]//button[text()="Save"]'
 );
 
 // ✅ Correct — distinguish interactive elements from dropdown items
@@ -134,23 +135,12 @@ private readonly saveButton = this.page.getByRole('button', { name: 'Save' }).nt
 
 ### 7.1 · Import Sources
 
-- Primary: `fixtures/index.ts` — the main fixture composition combining all fixture modules.
-- Legacy/Enhanced: `fixtures/enhancedFixtures.ts` — provides `test`, `authTest`, `adminTest`, `widgetTest`, `performanceTest`.
+Identify the project's fixture composition files (typically in a `fixtures/` directory). Common patterns:
 
-### 7.2 · Available Fixture Modules
+- A primary composed fixture file that combines all fixture modules.
+- Specialised fixture files for authentication, browser config, credentials, URLs, and third-party integrations.
 
-| File                  | Provides                                                                                                                                                                       |
-| --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `index.ts`            | Composed fixture with `browserConfig`, `userCredentials`, `systemUrls`, `rdfullConfig`, `commsConfig`, `dishcultConfig`, `stripeConfig`, `stylingConfig`, `rdlConfig`, `guest` |
-| `enhancedFixtures.ts` | `test` (base), `authTest` (auto-login), `adminTest` (admin creds), `widgetTest`, `performanceTest`                                                                             |
-| `evoFixtures.ts`      | Access Evo workspace fixtures                                                                                                                                                  |
-| `mcpFixtures.ts`      | MCP integration fixtures                                                                                                                                                       |
-| `userFixtures.ts`     | `UserCredentials` type and credential injection                                                                                                                                |
-| `urlFixtures.ts`      | `SystemUrls` type with all environment URLs                                                                                                                                    |
-| `stripeFixtures.ts`   | Stripe payment configuration                                                                                                                                                   |
-| `browserFixtures.ts`  | Browser configuration (viewport, locale, geolocation)                                                                                                                          |
-
-### 7.3 · Rules
+### 7.2 · Rules
 
 - Fixtures provide dependency injection for page objects and configuration.
 - Do not create new fixture files without discussion — extend existing ones.
@@ -169,23 +159,21 @@ tests/
       [testname].spec.ts
 ```
 
-Applications: `resdiaryFull`, `accessEvo`, `accessibilityTesting`, `API`, `authentication`, `devHub`, `dishCult`, `resdiaryMobile`, `reserveWithGoogle`.
+Organise tests by application area and feature. Check the project's existing directory structure for the canonical list of application directories.
 
 ### 8.2 · Test Tagging
 
 Tags are placed as prefixes in the `test.describe` description string:
 
 ```typescript
-test.describe("@AllTests @rdf-critical @rdf @rdf-widget Standard Widget Tests", () => {
+test.describe("@AllTests @smoke @critical Standard Feature Tests", () => {
   // ...
 });
 ```
 
-Common tags: `@AllTests`, `@rdf`, `@rdf-critical`, `@API`, `@ConsumerAPI`, `@Accessibility`, `@ReserveWithGoogle`, `@DevHub`, `@Evo`, `@DishCult`.
+When adding new tags, ensure they are registered in the CI pipeline configuration. When adding a new directory under `tests/`, ensure it is added to the pipeline's test directory list.
 
-When adding new tags, ensure they are registered in the CI pipeline YAML (`testTag` values). When adding a new directory under `tests/`, ensure it is added to the `testDir` values in the pipeline YAML.
-
-**Never fabricate test tags.** When porting tests from the Browser framework, always transpose the original tags — do not invent new ones.
+**Never fabricate test tags.** When porting tests from another framework, always transpose the original tags — do not invent new ones.
 
 ### 8.3 · Test Steps and Serial Mode
 
@@ -209,13 +197,13 @@ await element.waitFor({ state: "hidden" });
 
 // ✅ Wait for network response
 await page.waitForResponse(
-  (resp) => resp.url().includes("/api/bookings") && resp.status() === 200,
+  (resp) => resp.url().includes("/api/endpoint") && resp.status() === 200,
 );
 
-// ✅ Expect with default timeout (do NOT specify timeout: 5000 — that is the default)
+// ✅ Expect with default timeout
 await expect(element).toBeVisible();
 
-// ✅ Expect with non-default timeout
+// ✅ Expect with non-default timeout (only when the default is insufficient)
 await expect(element).toBeVisible({ timeout: 15_000 });
 ```
 
@@ -233,10 +221,10 @@ while (!(await element.isVisible())) {
 
 ### 9.4 · Timeout Configuration
 
-- Default Playwright timeout: `360,000ms` (6 minutes) — configured in `playwright.config.ts`.
-- The default `expect` timeout is `5,000ms`. Do not explicitly specify `timeout: 5000` — it is the default.
+- Check the project's `playwright.config.ts` for the configured test timeout and `expect` timeout.
+- Do not explicitly specify the default timeout value — it is already the default.
 - Only specify timeout values when they differ from the configured default.
-- Some accessibility suites (`diary-grid.spec.ts`, `diary-admin.spec.ts`) have intentionally high timeouts (`600,000ms`). **Do not change these** — they run full axe sweeps that legitimately require extended time.
+- Some suites (e.g. accessibility scans) may have intentionally high timeouts. **Do not change these** without understanding why they exist.
 
 ---
 
@@ -244,71 +232,72 @@ while (!(await element.isVisible())) {
 
 ### 10.1 · Purpose
 
-Use `ResourceLock` from `helpers/framework/resourceLock.ts` to prevent race conditions when multiple parallel workers try to book the same table/timeslot combinations.
+When multiple parallel workers compete for the same shared resources (e.g. timeslots, accounts, data records), use a resource locking mechanism to prevent race conditions.
 
 ### 10.2 · Usage
 
+If the project provides a `ResourceLock` helper (or similar), follow its pattern:
+
 ```typescript
 const lock = new ResourceLock();
-const slot = await lock.acquireSlot("001_closeout");
+const slot = await lock.acquireSlot("resource_key");
 try {
-  // Use slot.diary, slot.area, slot.table, slot.time, etc.
+  // Use the acquired resource
 } finally {
-  await lock.releaseSlot("001_closeout");
+  await lock.releaseSlot("resource_key");
 }
 ```
 
 ### 10.3 · Rules
 
-- File-based locking with configurable TTL and shard-aware partitioning.
 - Always release locks in `afterAll` or `afterEach`.
-- Ensure test data tags in `data/testdataset.dat` have enough slots for the maximum shard count (e.g., 5 slots for 5 shards).
-- Shard isolation: when running with `SHARD_INDEX` / `SHARD_TOTAL`, slots are partitioned across shards to prevent cross-shard collisions.
+- Ensure enough resource slots exist for the maximum shard/worker count.
+- When running with sharding (`SHARD_INDEX` / `SHARD_TOTAL`), slots should be partitioned across shards to prevent cross-shard collisions.
 
 ---
 
 ## 11 · Test Data Generation
 
-### 11.1 · Faker via TestDataGenerator
+### 11.1 · Use Project Utilities
 
-Use `TestDataGenerator` from `helpers/testDataGenerator.ts` (or `helpers/framework/testDataGenerator.ts`):
+Check the project's `helpers/` directory for data generation utilities (e.g. `TestDataGenerator`). Use these to generate realistic test data:
 
 ```typescript
 const forename = await TestDataGenerator.generateCustomerForename();
 const surname = await TestDataGenerator.generateCustomerSurname();
 const email = await TestDataGenerator.generateFakeEmail(forename, surname);
 const mobile = await TestDataGenerator.generateFakeMobileNumber();
-const customer = await TestDataGenerator.generateCustomerData(); // complete object
+const customer = await TestDataGenerator.generateCustomerData();
 ```
 
 ### 11.2 · Rules
 
-- Never hardcode customer names, emails, or phone numbers in tests.
-- Use `TestDataGenerator.generateCustomerData()` for complete customer objects.
-- UK locale is pre-configured (mobile numbers start with `07`, landlines with `01`/`02`).
+- Never hardcode names, emails, or phone numbers in tests.
+- Use the project's data generation utilities for complete test data objects.
+- Check the configured locale for region-specific formats (phone numbers, postcodes, etc.).
 
 ---
 
-## 12 · Reservation Cleanup Pattern
+## 12 · Test Data Cleanup Pattern
 
 ### 12.1 · Correct Pattern
 
-Tests that create bookings must use `Reservation` objects with `afterEach` hooks for teardown:
+Tests that create data (e.g. bookings, records, users) must clean up after themselves using `afterEach` hooks:
 
 ```typescript
-const microSiteName = process.env.AUTO_TEST_PROVIDER_1_MICROSITE_NAME!;
+const testConfig = process.env.TEST_SITE_IDENTIFIER!;
 
-test.describe("Booking Tests", () => {
-  let reservation: Reservation;
+test.describe("Data Creation Tests", () => {
+  let record: TestRecord;
 
   test.afterEach(async () => {
-    if (reservation?.bookingRef) {
-      await reservation.cancel();
+    if (record?.id) {
+      await record.delete();
     }
   });
 
-  test("create booking", async ({ page }) => {
-    reservation = new Reservation(10, 30, 30, "en-GB", microSiteName);
+  test("create record", async ({ page }) => {
+    record = new TestRecord(testConfig);
     // ...
   });
 });
@@ -316,20 +305,14 @@ test.describe("Booking Tests", () => {
 
 ### 12.2 · Critical: Module-Scope Environment Variables
 
-Always read environment variables (especially `*MICROSITE*` vars) into module-scoped constants. Never pass `process.env.*` inline to the `Reservation` constructor — if the env var is `undefined`, `cancel()` will silently skip without throwing, leaving orphan bookings that cause cascading test failures.
+Always read environment variables into module-scoped constants. Never pass `process.env.*` inline to constructors — if the env var is `undefined`, cleanup methods may silently skip without throwing, leaving orphan data that causes cascading test failures.
 
 ```typescript
 // ✅ Correct — module scope
-const microSiteName = process.env.AUTO_TEST_PROVIDER_1_MICROSITE_NAME!;
+const testConfig = process.env.TEST_SITE_IDENTIFIER!;
 
 // ❌ Wrong — inline, risks undefined
-new Reservation(
-  10,
-  30,
-  30,
-  "en-GB",
-  process.env.AUTO_TEST_PROVIDER_1_MICROSITE_NAME,
-);
+new TestRecord(process.env.TEST_SITE_IDENTIFIER);
 ```
 
 ---
@@ -338,22 +321,19 @@ new Reservation(
 
 ### 13.1 · URL Configuration
 
-- Only set `BASEURL` in `.env` — API URL is auto-derived via `getApiBaseUrl()` in `helpers/envHelpers.ts`.
-- URL pattern: `BASEURL='envname.goodluckwiththerelease.com'`.
-- API URL is derived as `https://api-{BASEURL}` (except `rdbranch.com` which uses `https://api.rdbranch.com`).
+- Configure the base URL in `.env` or environment variables.
+- If the project derives API URLs from the base URL, use the provided helper functions — do not hardcode API URLs.
 
 ### 13.2 · Credentials
 
-- Credentials come from Azure DevOps Variable Groups (`QAPlaywright`, `QABrowserFramework`).
-- Use `python3 generate_env.py` to generate `.env` from ADO variables.
+- Credentials should come from CI/CD variable groups or secret stores.
+- If the project provides an environment generation script, use it to populate `.env` from CI variables.
 - Never hardcode credentials or URLs in test files.
 - Keep secrets out of source control.
 
-### 13.3 · Required Environment Variables for Global Setup
+### 13.3 · Required Environment Variables
 
-`BASEURL`, `RD_AUTOMATION_KEY`, `ADMIN_USER_ID`, `PROVIDER_GROUP_ID`, `TEMPLATE_PROVIDER_ID`.
-
-Global setup can be skipped with `SKIP_GLOBAL_SETUP=true`.
+Check the project's README or global setup file for the list of required environment variables. Common patterns include a base URL, API keys, admin credentials, and test provider/tenant identifiers.
 
 ---
 
@@ -361,21 +341,23 @@ Global setup can be skipped with `SKIP_GLOBAL_SETUP=true`.
 
 ### 14.1 · Structure
 
-- API helpers in `apiHelpers/` directory: `auth.ts`, `consumerApi.ts`, `restaurantApi.ts`, `widgetApi.ts`, `loginAuth.ts`, `backOfficeAuth.ts`, `accessaCloudApi.ts`, `accessAiApi.ts`.
-- JSON schemas in `schemas/` directory (subdirectories: `consumerApi`, `widgetApi`).
+- API helpers should live in a dedicated directory (e.g. `apiHelpers/`).
+- JSON schemas for response validation should live in a `schemas/` directory.
 
 ### 14.2 · Rules
 
 - Use Playwright's `request` fixture or `APIRequestContext`.
-- Use the `Reservation` helper class for booking lifecycle (create, cancel, verify).
-- Validate response schemas using Ajv against JSON schemas in `schemas/`.
-- Tag API tests with `@API` and specific API tags (e.g., `@ConsumerAPI`).
+- If the project provides helper classes for common operations (e.g. data lifecycle management), use them.
+- Validate response schemas using a JSON schema validator (e.g. Ajv).
+- Tag API tests with appropriate tags (e.g. `@API`).
 
 ---
 
 ## 15 · TypeScript Standards
 
 ### 15.1 · ESLint Rules (Enforced)
+
+Check the project's ESLint configuration. Common enforced rules include:
 
 | Rule                                               | Level   |
 | -------------------------------------------------- | ------- |
@@ -393,23 +375,23 @@ Global setup can be skipped with `SKIP_GLOBAL_SETUP=true`.
 - Use `async/await` consistently — no `.then()` chains.
 - Prefer `type` over `interface` for new type definitions.
 - Export types for reusable structures.
-- Always run `npm run format-write` before creating commits.
+- Always run the project's formatting command before creating commits.
 - Always check for unused variables and imports before committing.
-- TypeScript compilation must pass (e.g. `npm run type-check`).
+- TypeScript compilation must pass.
 - Respect the project's configured tooling — do not run linters or formatters that the project has not set up.
 
 ---
 
 ## 16 · Naming Conventions
 
-| Artefact          | Convention                              | Example                                    |
-| ----------------- | --------------------------------------- | ------------------------------------------ |
-| Page Object class | `[PageName]Page`                        | `DiaryPage`, `DiaryLoginPage`              |
-| Page Object file  | `[pagename].page.ts`                    | `diary.page.ts`, `diaryLogin.page.ts`      |
-| Test file         | `[feature].spec.ts`                     | `bookingNoDeposit.spec.ts`                 |
-| Helper file       | `[purpose]Helper.ts` or `[purpose].ts`  | `envHelpers.ts`, `reservation.ts`          |
-| Fixture file      | `[context]Fixtures.ts`                  | `enhancedFixtures.ts`, `stripeFixtures.ts` |
-| API helper        | `[service]Api.ts` or `[service]Auth.ts` | `restaurantApi.ts`, `loginAuth.ts`         |
+| Artefact          | Convention                              | Example                                |
+| ----------------- | --------------------------------------- | -------------------------------------- |
+| Page Object class | `[PageName]Page`                        | `LoginPage`, `DashboardPage`           |
+| Page Object file  | `[pagename].page.ts`                    | `login.page.ts`, `dashboard.page.ts`   |
+| Test file         | `[feature].spec.ts`                     | `checkout.spec.ts`                     |
+| Helper file       | `[purpose]Helper.ts` or `[purpose].ts`  | `envHelpers.ts`, `dataUtils.ts`        |
+| Fixture file      | `[context]Fixtures.ts`                  | `authFixtures.ts`, `configFixtures.ts` |
+| API helper        | `[service]Api.ts` or `[service]Auth.ts` | `usersApi.ts`, `loginAuth.ts`          |
 
 ---
 
@@ -417,58 +399,54 @@ Global setup can be skipped with `SKIP_GLOBAL_SETUP=true`.
 
 ### 17.1 · Setup (`tests/global.setup.ts`)
 
-- Creates a dynamic test provider (temporary venue) for test isolation.
-- Creates test users (admin and general) attached to the dynamic provider.
-- Outputs dynamic environment variables (`DYNAMIC_PROVIDER_ID`, `DYNAMIC_PROVIDER_NAME`, etc.) for cross-shard consumption.
+- Creates dynamic test data or resources for test isolation (e.g. temporary accounts, tenants, or environments).
+- Outputs dynamic environment variables for cross-shard consumption.
 
 ### 17.2 · Teardown (`tests/global.teardown.ts`)
 
-- Deletes the dynamic provider and associated resources created during setup.
+- Deletes dynamic resources created during setup.
 
 ### 17.3 · Configuration
 
 - Setup/teardown are configured as Playwright projects with dependency chains.
-- Can be skipped: `SKIP_GLOBAL_SETUP=true`, `SKIP_GLOBAL_TEARDOWN=true`.
-- Outputs to `global-setup-output.json` for cross-shard variable passing.
+- Can be skipped via environment variables (e.g. `SKIP_GLOBAL_SETUP=true`, `SKIP_GLOBAL_TEARDOWN=true`).
+- Outputs to a JSON file for cross-shard variable passing.
 
 ---
 
 ## 18 · Playwright Configuration
 
-Key settings from `playwright.config.ts`:
+Review the project's `playwright.config.ts` for key settings. Common configuration includes:
 
-| Setting            | Value                   |
-| ------------------ | ----------------------- |
-| `timeout`          | `360,000ms` (6 minutes) |
-| `testIdAttribute`  | `data-at`               |
-| `trace`            | `retain-on-failure`     |
-| `screenshot`       | `on-first-failure`      |
-| `locale`           | `en-GB`                 |
-| `timezoneId`       | `Europe/London`         |
-| `retries`          | `1` on CI, `0` locally  |
-| `fullyParallel`    | `true`                  |
-| `viewport`         | `1920 × 963`            |
-| Reporter (sharded) | `blob`                  |
-| Reporter (local)   | `html` + `json`         |
+| Setting            | Typical Values                    |
+| ------------------ | --------------------------------- |
+| `timeout`          | Project-specific (check config)   |
+| `testIdAttribute`  | Project-specific (e.g. `data-at`) |
+| `trace`            | `retain-on-failure`               |
+| `screenshot`       | `on-first-failure`                |
+| `locale`           | Project-specific                  |
+| `timezoneId`       | Project-specific                  |
+| `retries`          | `1` on CI, `0` locally            |
+| `fullyParallel`    | `true`                            |
+| Reporter (sharded) | `blob`                            |
+| Reporter (local)   | `html` + `json`                   |
 
 ---
 
 ## 19 · CI/CD Pipeline
 
-- Azure DevOps with sharding support across multiple agents.
-- Blob reports when in shard mode, HTML + JSON locally.
-- Daily scheduled runs at 7am on `main`.
-- Environments: `QaAutomation` (default), `QaDevelopment`, `Feature`.
+- Check the project's CI/CD configuration for pipeline structure and sharding support.
+- Use blob reports when in shard mode, HTML + JSON locally.
 - Test filtering via `--grep` with tag parameters.
-- Pipeline templates in `templates/` directory.
+- Pipeline templates typically live in a `templates/` directory.
 
 ---
 
 ## 20 · Accessibility Testing
 
-- Dedicated suites in `tests/accessibilityTesting/`.
-- Uses axe-core for WCAG compliance scanning.
-- `diary-grid.spec.ts` and `diary-admin.spec.ts` have intentionally high timeouts (`600,000ms`) for full axe sweeps — **do not change these**.
+- Dedicated suites should live in a separate directory (e.g. `tests/accessibility/`).
+- Use axe-core for WCAG compliance scanning.
+- Accessibility suites may have intentionally high timeouts for full axe sweeps — **do not change these** without understanding why.
 - Tag with `@Accessibility`.
 
 ---
@@ -487,7 +465,7 @@ MCP (Model Context Protocol) is used for AI-assisted test creation and maintenan
 
 ### 21.2 · Rules
 
-- Before creating any new test, check existing tests by application.
+- Before creating any new test, check existing tests by application area.
 - Reuse existing page objects — **never** create duplicates.
 - Follow the pattern recognition workflow above.
 
@@ -495,10 +473,10 @@ MCP (Model Context Protocol) is used for AI-assisted test creation and maintenan
 
 ## 22 · Commit and PR Standards
 
-- Always run `npm run format-write` before creating commits.
+- Always run the project's formatting command before creating commits.
 - Formatting and casing changes must be in separate commits from feature changes.
-- When committing only npm package updates, use conventional commit format: `chore(deps): updating package x from version y to z`.
-- If an ADO work item number is provided, append with `AB#` prefix: `chore(deps): updating package x from version y to z AB#2241754`.
+- When committing only package updates, use conventional commit format: `chore(deps): updating package x from version y to z`.
+- If a work item/ticket number is provided, append it using the project's linking convention.
 
 ---
 
@@ -541,10 +519,10 @@ This opens the Playwright Inspector for interactive step-through with live locat
 | No `waitForTimeout()` | Use Playwright's built-in auto-waiting and explicit `waitFor` conditions. |
 | No fabricated selectors | Every selector must trace back to a real, verifiable source. |
 | No positional selectors | Never use `.first()`, `.nth()` to disambiguate duplicates — scope to a container. |
-| No hardcoded credentials | Use fixtures, environment variables, or ADO Variable Groups. |
-| No duplicate page objects | Search existing `pages/` directory before creating anything new. |
+| No hardcoded credentials | Use fixtures, environment variables, or CI/CD secret stores. |
+| No duplicate page objects | Search existing `pages/` directory before creating anything new (if POM is used). |
 | No inline `process.env` in constructors | Read environment variables into module-scoped constants. |
-| Always clean up test data | Use `afterEach` hooks with `Reservation.cancel()` to prevent orphan bookings. |
+| Always clean up test data | Use `afterEach` hooks to prevent orphan data causing cascading failures. |
 
 ---
 
@@ -552,15 +530,15 @@ This opens the Playwright Inspector for interactive step-through with live locat
 
 Before opening a PR, confirm every item:
 
-- [ ] All UI interactions go through Page Object classes (no raw locators in test files)
-- [ ] New page objects extend `BasePage` and use `private readonly` locators
-- [ ] No duplicate page objects — existing ones reused or extended
-- [ ] Test tags match existing conventions and are registered in pipeline YAML
+- [ ] If POM is used: all UI interactions go through Page Object classes (no raw locators in test files)
+- [ ] If POM is used: new page objects extend the base class and use `private readonly` locators
+- [ ] If POM is used: no duplicate page objects — existing ones reused or extended
+- [ ] Test tags match existing conventions and are registered in CI pipeline configuration
 - [ ] Selectors are scoped to container IDs for tabbed/panelled UIs
 - [ ] No `waitForTimeout()`, no polling loops, no arbitrary timeout increases
 - [ ] Environment variables read into module-scoped constants (not inline)
-- [ ] `Reservation` cleanup in `afterEach` for any test that creates bookings
-- [ ] `npm run format-write` executed before commit
+- [ ] Test data cleanup in `afterEach` for any test that creates data
+- [ ] Project formatting command executed before commit
 - [ ] No unused variables or imports
-- [ ] TypeScript compilation passes (`npm run type-check`)
-- [ ] Test file placed in correct `tests/[application]/[feature]/` directory
+- [ ] TypeScript compilation passes
+- [ ] Test file placed in correct directory per project conventions

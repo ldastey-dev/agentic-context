@@ -35,7 +35,8 @@ Combine multiple matches when a task spans domains.
 | Terraform, HCL, tfstate, module, provider | `.context/standards/terraform.md` | File layout, modules, tflint, Terratest |
 | ADO, Azure DevOps, pipeline, YAML pipeline | `.context/standards/ado-pipelines.md` | Triggers, templates, environments, approvals |
 | Docker, Dockerfile, container, image, compose | `.context/standards/docker.md` | Multi-stage builds, layer optimisation, scanning |
-| Playwright, E2E, end-to-end, QAPlaywright, page object, fixture | `.context/standards/playwright.md` | E2E only, POM mandatory, no fabricated selectors |
+| Playwright, E2E, end-to-end, page object, fixture | `.context/standards/playwright.md` | E2E only, POM conditional, no fabricated selectors |
+
 ---
 
 ## Playbooks — Assessments (structured codebase-level evaluation)

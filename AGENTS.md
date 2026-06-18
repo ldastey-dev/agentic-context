@@ -1,192 +1,166 @@
 # AGENTS.md
 
-Maintainer-facing guide for working in **this** repository — the source of standards, playbooks, and per-agent configuration templates that `deploy.sh` and `deploy.ps1` distribute into target repositories.
+<!-- TEMPLATE: Copy to your repository root as `AGENTS.md`.
+     Read by Devin, Cursor, Windsurf, and other coding agents.
+     Sections marked [CONFIGURE] require project-specific values.
+     All other sections are mandated standards — do not weaken them.
+     Delete <!-- PROJECT: ... --> comments after populating. -->
 
-This file is for contributors editing the templates here. It is **not** the `AGENTS.md` that gets shipped to consumers — that template lives at `core/AGENTS.md` and is copied into each target repo by the deploy scripts (the consumer fills in the `[CONFIGURE]` sections; the scripts do not template anything themselves).
+## Project Overview [CONFIGURE]
 
----
-
-## What This Repository Is
-
-A single-source-of-truth library of:
-
-- **Standards** (`standards/`) — per-concern prescriptive rules (security, testing, performance, .NET, React, etc.).
-- **Playbooks** (`playbooks/`) — step-by-step procedures for assessments, reviews, planning, and refactoring.
-- **Core configuration** (`core/`) — the lean, always-in-context files (`AGENTS.md`, `CLAUDE.md`, `.context/index.md`, conventions, per-agent redirects) that every target repo receives.
-- **Deploy scripts** (`deploy.sh`, `deploy.ps1`) — the writers that assemble the above into a target repository's layout for the selected agents.
-
-Consumers of this library run `deploy.sh` (or `deploy.ps1`) against their own repository. They never edit content here.
+<!-- PROJECT: One paragraph — what this application does, who uses it,
+     and what business value it delivers. -->
 
 ---
 
-## Core Design Principles
+## Tech Stack [CONFIGURE]
 
-These principles are why the repository is structured the way it is. Preserve them.
+<!-- PROJECT: List actual technologies. Agents must verify against this list
+     and the dependency manifest before assuming any library is available. -->
 
-### 1. One copy of every standard
+- **Language(s):**
+- **Framework(s):**
+- **Database(s):**
+- **Testing:**
+- **Linting / Formatting:**
+- **Package Manager:**
 
-Every standard, playbook, and convention exists in **exactly one** file. No standard is duplicated per agent. If a fact appears twice in this repo, one of the copies is wrong.
+---
 
-- Standards: one file per concern in `standards/`.
-- Playbooks: one file per procedure in `playbooks/{assess,review,plan,refactor}/`.
-- Conventions: one file per topic in `core/.context/conventions/`.
+## Commands [CONFIGURE]
 
-If you need to reference the same rule from two playbooks, link to the standard — do not paste the text.
+```bash
+<install dependencies>
+<run tests>
+<run tests with coverage>
+<lint>
+<format>
+<type check>
+<security audit>
+<build>
+```
 
-### 2. Separation of concerns: authoring vs. distribution
+---
 
-| Concern | Where | What lives here |
+## Architecture [CONFIGURE]
+
+<!-- PROJECT: Describe the actual architecture. -->
+
+- **Style:**
+- **Deployment model:**
+- **Service boundaries:**
+
+### Dependency Direction
+
+Dependencies point inward. This is non-negotiable.
+
+```text
+Presentation (Controllers / API)
+    ↓
+Application (Use Cases / Handlers)
+    ↓
+Domain (Entities / Value Objects / Interfaces)
+    ↓
+Infrastructure (Database / External APIs / Messaging)
+```
+
+<!-- PROJECT: Replace with your actual layer names. -->
+
+### Key Design Decisions
+
+<!-- PROJECT: List decisions agents must respect. Reference ADRs if they exist. -->
+
+---
+
+## Repository Structure [CONFIGURE]
+
+<!-- PROJECT: Map the directory layout. -->
+
+```text
+<project directory layout>
+```
+
+---
+
+## Code Conventions [CONFIGURE]
+
+### Naming
+
+<!-- PROJECT: Files, classes, functions, constants, database tables, API routes. -->
+
+### Patterns
+
+<!-- PROJECT: "When you add X, follow the pattern in Y." -->
+
+### Import Rules
+
+<!-- PROJECT: Which layers may import from which. -->
+
+---
+
+## Context System
+
+This repository uses on-demand context loading. Before starting any task, read `.context/index.md` and load files matching the current task's domain.
+
+Available context types:
+
+- **Standards** in `.context/standards/` — detailed reference for a specific concern (security, testing, performance, etc.)
+- **Playbooks** in `.context/playbooks/` — step-by-step procedures for assessments, reviews, plans, and refactoring
+- **Conventions** in `.context/conventions/` — workflow, communication, and coding style guidance
+
+---
+
+## Mandated Standards
+
+The following standards are non-negotiable. Do not weaken them. Detailed guidance is in `.context/standards/`.
+
+### Core Principles
+
+- **Simplicity First:** Make every change as simple as possible. Impact minimal code.
+- **No Laziness:** Find root causes. No temporary fixes. Senior developer standards.
+- **Minimal Impact:** Changes should only touch what's necessary. Avoid introducing bugs.
+- **Security is Non-Negotiable:** Never log secrets, commit credentials, or introduce injection vectors.
+- **Test What You Change:** If you modify behaviour, prove it works. If you refactor, prove nothing broke.
+- **Evidence Over Opinion:** Reference specific code, config, or behaviour. No vague assertions.
+
+### Domain Standards
+
+| Standard | Key Rule | Detail |
 | --- | --- | --- |
-| **Authoring** | `standards/`, `playbooks/`, `core/` | The prose. Edit these. |
-| **Distribution** | `deploy.sh`, `deploy.ps1` | The writers. They translate this repo's structure into the target's layout, selecting per-agent files based on `--agents`. |
+| Code Quality | SOLID, DRY, cyclomatic complexity < 10 | `.context/standards/code-quality.md` |
+| Security | OWASP Top 10 compliance | `.context/standards/security.md` |
+| Testing | >= 90% coverage, Test Trophy Model | `.context/standards/testing.md` |
+| CI/CD | 7-stage pipeline, < 10 min full CI | `.context/standards/ci-cd.md` |
+| Observability | OpenTelemetry, structured JSON logging | `.context/standards/observability.md` |
+| Resilience | Circuit breakers, retries with backoff | `.context/standards/resilience.md` |
+| Performance | No N+1, pagination, resource disposal | `.context/standards/performance.md` |
+| Cost | Cache before network, FinOps principles | `.context/standards/cost-optimisation.md` |
+| Operations | IaC, env vars, small focused PRs | `.context/standards/operational-excellence.md` |
+| API Design | OpenAPI 3+, REST, RFC 7807 errors | `.context/standards/api-design.md` |
+| AWS | 6 pillars: OpEx, Security, Reliability, Perf, Cost, Sustainability | `.context/standards/aws-well-architected.md` |
+| Azure | 5 pillars: Reliability, Security, Cost, OpEx, Performance | `.context/standards/azure-well-architected.md` |
+| GDPR | Lawful basis, data minimisation, subject rights | `.context/standards/gdpr.md` |
+| PCI DSS | CDE scoping, AES-256, TLS 1.2+ | `.context/standards/pci-dss.md` |
+| Accessibility | WCAG 2.2 AA, keyboard, ARIA, contrast | `.context/standards/accessibility.md` |
+| Architecture | Clean Architecture, dependency direction, layer boundaries | `.context/standards/architecture.md` |
+| IaC | State management, drift detection, container security | `.context/standards/iac.md` |
+| Tech Debt | Debt taxonomy, impact scoring, paydown strategy | `.context/standards/tech-debt.md` |
 
-Authoring changes touch markdown only. Distribution changes touch the scripts only. Do not mix.
+### Technology Standards
 
-### 3. Per-agent files are thin redirects, not duplicates
-
-The point of supporting multiple agents (Claude Code, Cursor, Windsurf, Devin, Copilot) is **not** to write multiple copies of our standards. It is to write a small adapter file that each agent reads and then sends the agent to `AGENTS.md` + `.context/index.md`.
-
-- `core/.cursor/rules/standards.mdc`, `core/.windsurfrules`, `core/.devin/devin.json`, `core/.github/copilot-instructions.md`, `core/CLAUDE.md` — all are redirects. None contains a standard.
-- For Claude Code and Copilot, `deploy.sh` additionally generates skill wrappers from playbook frontmatter — wrappers, not copies.
-
-If you find yourself writing prose in a per-agent file, stop and put it in `core/AGENTS.md` or a standard instead.
-
-### 4. Context-loaded over always-in-context
-
-Only `core/` is loaded into every agent session. Standards and playbooks are loaded **on demand** when the agent matches a keyword in `core/.context/index.md`. This keeps the always-in-context footprint to ~60 lines.
-
-When adding a new standard or playbook, the new entry in `core/.context/index.md` is what makes it discoverable. Without that entry, agents will never find it.
-
-### 5. Prescriptive, not advisory
-
-Standards use "must", "never", "always". They are not suggestions. Every standard ends with a `## Non-Negotiables` and a `## Decision Checklist` so a reader can act without rereading the body.
-
----
-
-## Source → Target Layout
-
-The on-disk tree for this repository is documented in the [Repository Structure section of the README](README.md#repository-structure). Do not duplicate it here.
-
-The directory layout in this repo is **not** the layout in target repos. The deploy scripts remap source paths to target paths as follows:
-
-| Source here | Target repo path |
-| --- | --- |
-| `core/AGENTS.md` | `<repo>/AGENTS.md` |
-| `core/CLAUDE.md` | `<repo>/CLAUDE.md` |
-| `core/.context/index.md` | `<repo>/.context/index.md` |
-| `core/.context/conventions/*` | `<repo>/.context/conventions/*` |
-| `standards/*.md` | `<repo>/.context/standards/*.md` |
-| `playbooks/**/*.md` | `<repo>/.context/playbooks/**/*.md` |
-| `core/.cursor/`, `.devin/`, `.windsurfrules`, `.github/copilot-instructions.md` | mirrored to target (only when the agent is selected) |
-| Skill wrappers generated from `playbooks/**/*.md` frontmatter | `<repo>/.claude/skills/` and `<repo>/.github/skills/` (Claude/Copilot only) |
+| Standard | Key Rule | Detail |
+| --- | --- | --- |
+| .NET | C#, ASP.NET Core, EF Core, async patterns | `.context/standards/dotnet.md` |
+| React | Component architecture, hooks, Testing Library | `.context/standards/react.md` |
+| SQL Server | Schema design, migrations, Azure SQL | `.context/standards/mssql.md` |
+| PowerShell | Verb-Noun, parameters, Pester, Az module | `.context/standards/powershell.md` |
+| Terraform | File layout, modules, tflint, Terratest | `.context/standards/terraform.md` |
+| ADO Pipelines | Triggers, templates, environments, approvals | `.context/standards/ado-pipelines.md` |
+| Docker | Multi-stage builds, layer optimisation, scanning | `.context/standards/docker.md` |
+| Playwright | E2E only, POM conditional, no fabricated selectors | `.context/standards/playwright.md` |
 
 ---
 
-## Working in This Repository
+## Project-Specific Rules [CONFIGURE]
 
-### Adding a new standard
-
-1. Create `standards/<concern>.md`. Use the `## N · Section Title` heading style (middle-dot separator).
-2. End with `## Non-Negotiables` and `## Decision Checklist`.
-3. Add a row to the Domain Standards or Technology Standards table in `core/AGENTS.md`.
-4. Add a keyword route in `core/.context/index.md`.
-5. If there is a matching assessment or review playbook, link to it from the standard.
-
-### Adding a new playbook
-
-1. Create `playbooks/<category>/<name>.md` where category is `assess`, `review`, `plan`, or `refactor`.
-2. Use YAML frontmatter:
-
-   ```yaml
-   ---
-   name: <category>-<name>
-   description: "One-line description used by deploy.sh to generate skill wrappers."
-   keywords: [phrase one, phrase two]
-   ---
-   ```
-
-3. Use semantic, non-numbered headings (`## Role`, `## Phase 1: Discovery`, ...).
-4. Add a keyword route in `core/.context/index.md`.
-5. Do not generate skill wrappers by hand. `deploy.sh` does that from the frontmatter.
-
-### Adding support for a new agent
-
-1. Add the agent's redirect file under `core/` (e.g. `core/.newagent/config.yaml`).
-2. The redirect must point the agent to `AGENTS.md` and `.context/index.md` — never duplicate standards.
-3. Extend `deploy.sh` and `deploy.ps1`: agent flag parsing, interactive menu entry, copy step.
-4. Update the README's "Supported Agents" table.
-
-### Editing standards or playbooks
-
-- Keep instructions prescriptive ("must", "never", "always").
-- Use **British English** throughout (optimisation, behaviour, colour).
-- Use **kebab-case** for file names.
-- Spell SOLID principles in full — never SRP, OCP, etc.
-- Mark project-specific sections in templates with `[CONFIGURE]` in the heading and `<!-- PROJECT: ... -->` HTML comments inline.
-
-### Editing deploy scripts
-
-- `deploy.sh` (bash) and `deploy.ps1` (PowerShell) must stay behaviour-equivalent. A change to one usually needs the matching change in the other.
-- Both must honour the overwrite guard (`--overwrite` / `--no-overwrite`, interactive prompt otherwise).
-- The interactive `--agents` menu must work on macOS, Linux, and Windows PowerShell.
-- **Never run `deploy.sh` or `deploy.ps1` against this repository.** This repo is the source library, not a deploy target. Running the scripts here writes `/AGENTS.md`, `/CLAUDE.md`, `/.context/`, `/.cursor/`, `/.devin/`, `/.windsurfrules`, `/.github/copilot-instructions.md`, `/.claude/`, and `/.github/skills/` at the repo root — the `.gitignore` keeps those out of commits, but they overlay tracked source paths (`core/AGENTS.md` is the tracked source; `/AGENTS.md` is the tracked maintainer guide) and create confusing untracked state. To test a deploy-script change, run it against an empty scratch directory (`mkdir /tmp/agentic-context-test && ./deploy.sh /tmp/agentic-context-test`) or another repo entirely.
-
----
-
-## What Belongs Where
-
-| If you are adding... | Put it in... |
-| --- | --- |
-| A prescriptive rule about how code should be written | `standards/<concern>.md` |
-| A procedure for assessing or changing code | `playbooks/<category>/<name>.md` |
-| A workflow, communication, or naming convention | `core/.context/conventions/*.md` |
-| The lean per-project config every target repo gets | `core/AGENTS.md` |
-| A pointer for a specific agent to find AGENTS.md | `core/<agent-specific-file>` |
-| A keyword route to discover a standard or playbook | `core/.context/index.md` |
-| Anything about how files are written to target repos | `deploy.sh` and `deploy.ps1` |
-
-If a change does not fit any row above, it probably does not belong in this repo.
-
----
-
-## What Does Not Belong Here
-
-- **Engagement artefacts.** Assessment reports, pen-test write-ups, and review outputs produced *by* using these playbooks against a target codebase. Keep them locally under `/engagements/` (git-ignored), alongside any `reviews/` directories (also ignored at any depth).
-- **Deploy outputs.** Anything written to the repo root by `deploy.sh` (e.g. a generated `/AGENTS.md` template copy, `/.context/`, `/.cursor/`, etc.) when this repo is used as its own deploy target for local testing. The `.gitignore` anchors these with leading slashes so they cannot be accidentally committed; `core/<same name>` is the tracked source and is never affected.
-- **Per-agent duplicates of standards.** See Core Design Principle 3.
-- **Local editor or agent settings** beyond what every contributor needs. `/.claude/`, `/.cursor/`, `/.devin/` at the repo root, and `.vscode/` at any depth, are ignored.
-
----
-
-## Conventions
-
-The shared writing conventions (British English, kebab-case file names, the `## N · Section Title` standards heading style, semantic playbook headings, `[CONFIGURE]` markers, and `<!-- PROJECT: ... -->` inline customisation points) are documented in the [Conventions section of the README](README.md#conventions). They apply equally to maintainers and consumers — do not restate them here.
-
-Additional rules that apply specifically to maintainers of this template repo:
-
-- **Prescriptive language** — standards must use "must", "never", "always". They are not advisory.
-- **SOLID principles in full** — never SRP, OCP, LSP, ISP, DIP. Spell them out so an agent loading the standard out of context can still understand it.
-
----
-
-## Non-Negotiables
-
-- **Never run `deploy.sh` or `deploy.ps1` against this repository.** Test deploy-script changes in a scratch directory or against another repo. See [Editing deploy scripts](#editing-deploy-scripts) for the reasoning.
-- Never duplicate a standard across files. One canonical home per rule.
-- Never write a standard inside a per-agent redirect file.
-- Never paste playbook text into a skill wrapper — regenerate from frontmatter.
-- Keep authoring (markdown) and distribution (deploy scripts) separate in every change.
-- Never commit engagement artefacts or root-level deploy outputs.
-- `deploy.sh` and `deploy.ps1` must remain behaviour-equivalent.
-
-## Decision Checklist
-
-Before opening a PR, confirm:
-
-- [ ] No existing file already covers this content (would be duplication).
-- [ ] Prose lives in `standards/`, `playbooks/`, or `core/.context/` — not in a per-agent file.
-- [ ] If a new standard or playbook: added to `core/.context/index.md` and (for standards) the table in `core/AGENTS.md`.
-- [ ] If a deploy script change: both `deploy.sh` and `deploy.ps1` updated, and tested against a scratch directory — never against this repo.
-- [ ] If a new agent: redirect file added under `core/`, both deploy scripts updated, README table updated.
-- [ ] British English, kebab-case, prescriptive language.
-- [ ] No engagement artefacts or generated deploy outputs in the diff.
+<!-- PROJECT: Rules unique to this project that don't fit the categories above. -->
