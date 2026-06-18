@@ -213,11 +213,15 @@ await expect(element).toBeVisible({ timeout: 15_000 });
 // ❌ Never use manual waits
 await page.waitForTimeout(2000);
 
-// ❌ Never use polling loops
+// ❌ Never use polling loops as a substitute for Playwright's built-in waits
 while (!(await element.isVisible())) {
   await sleep(100);
 }
+// ✅ Use expect() instead
+await expect(element).toBeVisible();
 ```
+
+> **Exception:** Polling loops are permissible when waiting for conditions that have no Playwright-native wait — e.g. polling an API endpoint until a backend state changes, checking MailCatcher for email delivery, or verifying eventual consistency in async workflows. In these cases, use a bounded loop with a reasonable timeout and a clear failure message.
 
 ### 9.4 · Timeout Configuration
 
@@ -535,7 +539,7 @@ Before opening a PR, confirm every item:
 - [ ] If POM is used: no duplicate page objects — existing ones reused or extended
 - [ ] Test tags match existing conventions and are registered in CI pipeline configuration
 - [ ] Selectors are scoped to container IDs for tabbed/panelled UIs
-- [ ] No `waitForTimeout()`, no polling loops, no arbitrary timeout increases
+- [ ] No `waitForTimeout()`, no polling loops substituting Playwright waits, no arbitrary timeout increases
 - [ ] Environment variables read into module-scoped constants (not inline)
 - [ ] Test data cleanup in `afterEach` for any test that creates data
 - [ ] Project formatting command executed before commit
