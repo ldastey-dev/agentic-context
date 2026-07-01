@@ -555,6 +555,7 @@ if ((Test-AgentEnabled 'claude') -or (Test-AgentEnabled 'copilot')) {
         @{ Dir = 'review';   Tools = 'Read, Grep, Glob, Bash(git *)' }
         @{ Dir = 'plan';     Tools = $null }
         @{ Dir = 'refactor'; Tools = $null }
+        @{ Dir = 'docs';     Tools = $null }
     )
 
     foreach ($category in $playbookCategories) {
