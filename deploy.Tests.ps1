@@ -6,7 +6,7 @@ BeforeAll {
 
 Describe 'Test-IsUtf8Compatible' {
     BeforeAll {
-        $TestDir = New-Item -ItemType Directory -Path (Join-Path $env:TEMP "deploy-tests-$([System.Guid]::NewGuid())") -Force
+        $TestDir = New-Item -ItemType Directory -Path (Join-Path ([System.IO.Path]::GetTempPath()) "deploy-tests-$([System.Guid]::NewGuid())") -Force
     }
     AfterAll {
         Remove-Item $TestDir.FullName -Recurse -Force -ErrorAction SilentlyContinue
@@ -80,7 +80,7 @@ Describe 'Test-IsUtf8Compatible' {
 
 Describe 'Copy-SingleFile' {
     BeforeAll {
-        $TestDir = New-Item -ItemType Directory -Path (Join-Path $env:TEMP "deploy-copyfile-$([System.Guid]::NewGuid())") -Force
+        $TestDir = New-Item -ItemType Directory -Path (Join-Path ([System.IO.Path]::GetTempPath()) "deploy-copyfile-$([System.Guid]::NewGuid())") -Force
         $SrcDir = New-Item -ItemType Directory -Path (Join-Path $TestDir 'src') -Force
         $DstDir = New-Item -ItemType Directory -Path (Join-Path $TestDir 'dst') -Force
         $script:OverwriteMode = 'all'

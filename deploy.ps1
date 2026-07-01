@@ -475,6 +475,7 @@ function New-SkillsForSelectedAgents {
 # Main
 # ---------------------------------------------------------------------------
 
+# Dot-source guard: allows deploy.Tests.ps1 to import these functions without running a deploy.
 if ($MyInvocation.InvocationName -ne '.') {
 
 if ($Help) {
