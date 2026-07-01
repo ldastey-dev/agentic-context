@@ -33,7 +33,7 @@ Combine multiple matches when a task spans domains.
 | SQL, MSSQL, database, schema, migration, stored proc | `.context/standards/mssql.md` | Schema design, migrations, Azure SQL |
 | PowerShell, PS, script, Az module, Pester | `.context/standards/powershell.md` | Verb-Noun, parameters, Pester, Az module |
 | Terraform, HCL, tfstate, module, provider | `.context/standards/terraform.md` | File layout, modules, tflint, Terratest |
-| ADO, Azure DevOps, pipeline, YAML pipeline | `.context/standards/ado-pipelines.md` | Triggers, templates, environments, approvals |
+| ADO, Azure DevOps, pipeline, YAML pipeline, version, versioning, SemVer, build number | `.context/standards/ado-pipelines.md` | Triggers, templates, environments, approvals, build versioning |
 | Docker, Dockerfile, container, image, compose | `.context/standards/docker.md` | Multi-stage builds, layer optimisation, scanning |
 
 ---

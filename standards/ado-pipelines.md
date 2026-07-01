@@ -288,11 +288,14 @@ Every Azure DevOps YAML pipeline must be explicit, secure, and reproducible. Tri
 
 ### 13.1 · Semantic Versioning Format
 
-- Any pipeline version value, such as a `version`/`buildVersion` entry under `variables:` or a version encoded in the pipeline `name:` / `Build.BuildNumber`, must follow `MAJOR.MINOR.PATCH` format.
-- Every code change must increment that configured version value or build number — never leave it unchanged after a change.
-- Versions must always increment, never reset or decrease.
-- Versions must stay in sync across all pipeline YAML files in the repository.
-- If multiple YAML files reference a shared variable file (e.g. `variables.yml`), update the version there instead of in individual files.
+These rules apply to a **declared version variable** — a `version`/`buildVersion` entry under `variables:` in the pipeline, or a shared `variables.yml`. This is arbitrary user-controlled data that the team maintains to describe the pipeline's release version. It is distinct from the pipeline run identifier (see below).
+
+- The declared version variable must follow `MAJOR.MINOR.PATCH` format.
+- Every change that alters pipeline behaviour must bump the version variable per SemVer — see §13.2 for which component to increment.
+- The version variable must always increment, never decrease.
+- The version variable must stay in sync across all pipeline YAML files in the repository. If multiple YAML files reference a shared variable file (e.g. `variables.yml`), maintain the version there instead of in individual files.
+
+The pipeline `name:` and the resulting `Build.BuildNumber` are a **separate mechanism**. `Build.BuildNumber` is the run identifier that Azure DevOps evaluates at queue time; it may embed run tokens such as `$(Rev:r)` or dates that legitimately reset per day or per version. These tokens are **not** the target of the SemVer increment rule above — resetting `$(Rev:r)` for a new day or a new version is expected behaviour, not a violation.
 
 ### 13.2 · Increment Strategy
 
@@ -307,20 +310,22 @@ Every Azure DevOps YAML pipeline must be explicit, secure, and reproducible. Tri
 | New feature or stage added | Add new deploy stage | `1.2.4 → 1.3.0` |
 | Incompatible breaking change | Remove existing endpoint | `1.3.0 → 2.0.0` |
 
+**Automated versioning.** Separate the two mechanisms. For the run identifier, prefer an automated source — `$[counter(...)]` for a monotonic build counter, or GitVersion where richer version derivation is needed — so `Build.BuildNumber` needs no manual maintenance. Reserve manual SemVer maintenance for the declared release/version variable (§13.1), where the MAJOR/MINOR/PATCH decision reflects a deliberate human judgement about the nature of the change that no counter can infer.
+
 ### 13.3 · Version Bump Commits
 
 - Version bump commits must use the conventional commit format: `type(scope): subject`
-  - `type` must be one of: `build`, `ci`, `docs`, `feat`, `fix`, `perf`, `refactor`, `style`, `test`, `chore`, `revert`
+  - `type` for a plain version bump is `chore`; for changes that also bump the version, use the `type` that describes the change (e.g. `feat`, `fix`)
   - `scope` is optional contextual information (e.g. the feature or pipeline name)
   - `subject` must be imperative present tense, lowercase, no trailing period
 - Breaking changes must be marked with `!`: `chore!: bump version to x.y.z`
 - Standard version bump commit: `chore: bump version to x.y.z`
 
-```
+```text
 chore: bump version to 1.2.4
 chore!: bump version to 2.0.0
 feat: add deployment stage for staging environment
-fix: correct incorrect agent pool selection
+fix: correct agent pool selection
 ```
 
 ---
@@ -335,7 +340,7 @@ fix: correct incorrect agent pool selection
 - Template references must always point to a versioned ref, never a floating branch.
 - `vmImage` must be pinned to a specific version — never use `ubuntu-latest` in production pipelines.
 - Fork build policies must always prevent secrets from being accessed in forked PR builds.
-- Every code change must increment the pipeline version — never leave it unchanged.
+- Every change that alters pipeline behaviour must bump the declared version variable per SemVer.
 
 ---
 
