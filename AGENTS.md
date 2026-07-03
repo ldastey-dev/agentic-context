@@ -28,7 +28,7 @@ These principles are why the repository is structured the way it is. Preserve th
 Every standard, playbook, and convention exists in **exactly one** file. No standard is duplicated per agent. If a fact appears twice in this repo, one of the copies is wrong.
 
 - Standards: one file per concern in `standards/`.
-- Playbooks: one file per procedure in `playbooks/{assess,review,plan,refactor}/`.
+- Playbooks: one file per procedure in `playbooks/{assess,review,plan,refactor,docs}/`.
 - Conventions: one file per topic in `core/.context/conventions/`.
 
 If you need to reference the same rule from two playbooks, link to the standard — do not paste the text.
@@ -94,7 +94,7 @@ The directory layout in this repo is **not** the layout in target repos. The dep
 
 ### Adding a new playbook
 
-1. Create `playbooks/<category>/<name>.md` where category is `assess`, `review`, `plan`, or `refactor`.
+1. Create `playbooks/<category>/<name>.md` where category is `assess`, `review`, `plan`, `refactor`, or `docs`.
 2. Use YAML frontmatter:
 
    ```yaml

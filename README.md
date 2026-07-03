@@ -128,6 +128,8 @@ playbooks/                              Tier 2 — on demand (→ target .contex
     adr.md, design-doc.md, risk-assessment.md, spike.md
   refactor/                             Structured code change procedures (3)
     safe-refactor.md, extract-module.md, dependency-upgrade.md
+  docs/                                 Developer-facing documentation generation (1)
+    gitbook.md
 ```
 
 ## Playbook Format

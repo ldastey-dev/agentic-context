@@ -99,6 +99,14 @@ Combine multiple matches when a task spans domains.
 
 ---
 
+## Playbooks — Documentation (developer-facing documentation generation)
+
+| Keywords | File | Summary |
+|----------|------|---------|
+| gitbook, api documentation, doc generation, developer docs, openapi docs | `.context/playbooks/docs/gitbook.md` | Generate API documentation as markdown guides and references for GitBook |
+
+---
+
 ## Conventions (style and workflow guidance)
 
 | Keywords | File | Summary |
