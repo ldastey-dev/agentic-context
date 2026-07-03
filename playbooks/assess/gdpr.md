@@ -84,7 +84,7 @@ Evaluate the application against the GDPR requirements defined in `standards/gdp
 | Encryption | Verify encryption at rest and in transit meets the requirements in `standards/gdpr.md` §7. |
 | Pseudonymisation | Assess whether pseudonymisation is applied where full identification is not required, per `standards/gdpr.md` §7. |
 | Access control | Verify personal data access controls per `standards/gdpr.md` §7. |
-| Logging | Verify access logging per `standards/gdpr.md` §3. Confirm logs themselves do not contain unmasked personal data. |
+| Logging | Verify access logging per `standards/gdpr.md` §10. Confirm logs themselves do not contain unmasked personal data, per `standards/gdpr.md` §3. |
 | Breach detection | Verify breach detection and 72-hour notification capability per `standards/gdpr.md` §10. |
 
 ### 2.4 International Transfers (Chapter V)
