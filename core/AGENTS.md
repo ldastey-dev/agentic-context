@@ -157,6 +157,7 @@ The following standards are non-negotiable. Do not weaken them. Detailed guidanc
 | Terraform | File layout, modules, tflint, Terratest | `.context/standards/terraform.md` |
 | ADO Pipelines | Triggers, templates, environments, approvals | `.context/standards/ado-pipelines.md` |
 | Docker | Multi-stage builds, layer optimisation, scanning | `.context/standards/docker.md` |
+| Playwright | Page Object Model, semantic locators, auto-waiting, fixtures | `.context/standards/playwright.md` |
 
 ---
 
