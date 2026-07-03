@@ -152,7 +152,34 @@ function Confirm-Overwrite {
     }
 }
 
+$script:TextExtensions = @('.md', '.json', '.mdc', '.txt', '.yaml', '.yml', '.toml', '.ini')
+
+function Test-IsUtf8Compatible {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [string]$Path
+    )
+    $resolvedPath = [System.IO.Path]::GetFullPath($Path)
+    try {
+        $bom = [byte[]]::new(4)
+        $stream = [System.IO.File]::OpenRead($resolvedPath)
+        try { $read = $stream.Read($bom, 0, 4) }
+        finally { $stream.Close() }
+        # UTF-32 must be tested before UTF-16 (shares FF FE prefix)
+        if ($read -ge 4 -and $bom[0] -eq 0xFF -and $bom[1] -eq 0xFE -and $bom[2] -eq 0x00 -and $bom[3] -eq 0x00) { return $false } # UTF-32 LE
+        if ($read -ge 4 -and $bom[0] -eq 0x00 -and $bom[1] -eq 0x00 -and $bom[2] -eq 0xFE -and $bom[3] -eq 0xFF) { return $false } # UTF-32 BE
+        if ($read -ge 2 -and $bom[0] -eq 0xFF -and $bom[1] -eq 0xFE) { return $false }                                              # UTF-16 LE
+        if ($read -ge 2 -and $bom[0] -eq 0xFE -and $bom[1] -eq 0xFF) { return $false }                                              # UTF-16 BE
+        return $true
+    } catch {
+        Write-Warning "Test-IsUtf8Compatible: could not read '$resolvedPath' — $_. Falling back to Copy-Item."
+        return $false
+    }
+}
+
 function Copy-SingleFile {
+    [CmdletBinding()]
     param([string]$Source, [string]$Destination)
     if (-not (Confirm-Overwrite -Destination $Destination)) {
         return
@@ -161,7 +188,15 @@ function Copy-SingleFile {
     if (-not (Test-Path $parentDir)) {
         New-Item -ItemType Directory -Path $parentDir -Force | Out-Null
     }
-    Copy-Item -Path $Source -Destination $Destination -Force
+    $ext = [System.IO.Path]::GetExtension($Source).ToLowerInvariant()
+    if (($ext -in $script:TextExtensions) -and (Test-IsUtf8Compatible -Path $Source)) {
+        # ANSI/Windows-1252 files without a BOM are indistinguishable from UTF-8 at the header level and will pass
+        # Test-IsUtf8Compatible; characters above U+007F may be silently replaced. All repo source files are UTF-8.
+        $content = [System.IO.File]::ReadAllText($Source, [System.Text.Encoding]::UTF8) -replace "`r`n", "`n" -replace "`r", "`n"
+        [System.IO.File]::WriteAllText($Destination, $content, (New-Object System.Text.UTF8Encoding($false)))
+    } else {
+        Copy-Item -Path $Source -Destination $Destination -Force
+    }
 }
 
 function Copy-DirectoryContents {
@@ -418,7 +453,7 @@ function New-SkillWrapper {
     $lines += @("---", "", "Read and follow ${bt}.context/playbooks/${RelPath}${bt} in full.")
 
     $content = ($lines -join "`n") + "`n"
-    [System.IO.File]::WriteAllText($skillFile, $content)
+    [System.IO.File]::WriteAllText($skillFile, $content, (New-Object System.Text.UTF8Encoding($false)))
 }
 
 function New-SkillsForSelectedAgents {
@@ -439,6 +474,9 @@ function New-SkillsForSelectedAgents {
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
+
+# Dot-source guard: allows deploy.Tests.ps1 to import these functions without running a deploy.
+if ($MyInvocation.InvocationName -ne '.') {
 
 if ($Help) {
     Show-Usage
@@ -607,3 +645,5 @@ if ($script:SkippedFiles.Count -gt 0) {
         Write-Host "  - $f"
     }
 }
+
+} # end dot-source guard
