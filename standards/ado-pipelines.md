@@ -310,7 +310,7 @@ The pipeline `name:` and the resulting `Build.BuildNumber` are a **separate mech
 | New feature or stage added | Add new deploy stage | `1.2.4 → 1.3.0` |
 | Incompatible breaking change | Remove existing endpoint | `1.3.0 → 2.0.0` |
 
-**Automated versioning.** Separate the two mechanisms. For the run identifier, prefer an automated source — `$[counter(...)]` for a monotonic build counter, or GitVersion where richer version derivation is needed — so `Build.BuildNumber` needs no manual maintenance. Reserve manual SemVer maintenance for the declared release/version variable (§13.1), where the MAJOR/MINOR/PATCH decision reflects a deliberate human judgement about the nature of the change that no counter can infer.
+**Automated versioning.** Separate the two mechanisms. For the run identifier, prefer an automated source — `$(counter(...))` for a monotonic build counter, or GitVersion where richer version derivation is needed — so `Build.BuildNumber` needs no manual maintenance. Reserve manual SemVer maintenance for the declared release/version variable (§13.1), where the MAJOR/MINOR/PATCH decision reflects a deliberate human judgement about the nature of the change that no counter can infer.
 
 ### 13.3 · Version Bump Commits
 
