@@ -58,34 +58,34 @@ Evaluate the application against the GDPR requirements defined in `standards/gdp
 
 | Principle | What to evaluate |
 |---|---|
-| Lawfulness, fairness, transparency | Verify each processing activity has a valid lawful basis per `standards/gdpr.md` §1. Assess whether privacy notices are clear and accessible. |
-| Purpose limitation | Verify data is used only for its collected purpose per `standards/gdpr.md` §1. Check for secondary processing without additional basis. |
-| Data minimisation | Evaluate collection against the minimisation requirements in `standards/gdpr.md` §1. Identify any over-collection. |
-| Accuracy | Verify correction mechanisms exist per `standards/gdpr.md` §1. Assess processes for keeping data current. |
-| Storage limitation | Verify retention periods are defined and enforced per `standards/gdpr.md` §3. Check for data kept beyond its justified period. |
-| Integrity and confidentiality | Evaluate technical measures against the encryption and access control requirements in `standards/gdpr.md` §4. |
-| Accountability | Verify records of processing are maintained per `standards/gdpr.md` §5. Can the organisation demonstrate compliance? |
+| Lawfulness, fairness, transparency | Verify each processing activity has a valid lawful basis per `standards/gdpr.md` §2. Assess whether privacy notices are clear and accessible. |
+| Purpose limitation | Verify data is used only for its collected purpose per `standards/gdpr.md` §2. Check for secondary processing without additional basis. |
+| Data minimisation | Evaluate collection against the minimisation requirements in `standards/gdpr.md` §3. Identify any over-collection. |
+| Accuracy | Verify correction mechanisms exist per `standards/gdpr.md` §5. Assess processes for keeping data current. |
+| Storage limitation | Verify retention periods are defined and enforced per `standards/gdpr.md` §6. Check for data kept beyond its justified period. |
+| Integrity and confidentiality | Evaluate technical measures against the encryption and access control requirements in `standards/gdpr.md` §7. |
+| Accountability | Verify records of processing are maintained per `standards/gdpr.md` §2. Can the organisation demonstrate compliance? |
 
 ### 2.2 Data Subject Rights (Articles 15-22)
 
 | Right | What to evaluate |
 |---|---|
-| Access (Art. 15) | Verify the application can fulfil access requests per `standards/gdpr.md` §2. Can all personal data for a subject be retrieved in a structured format? |
-| Rectification (Art. 16) | Verify correction capability across all stores per `standards/gdpr.md` §2. |
-| Erasure (Art. 17) | Verify deletion capability per `standards/gdpr.md` §2. Assess cascading deletions and referential integrity handling. |
-| Portability (Art. 20) | Verify export capability in machine-readable format per `standards/gdpr.md` §2. |
-| Restriction (Art. 18) | Verify processing restriction capability per `standards/gdpr.md` §2. |
-| Objection (Art. 21) | Verify objection capability for specific processing activities per `standards/gdpr.md` §2. |
+| Access (Art. 15) | Verify the application can fulfil access requests per `standards/gdpr.md` §5. Can all personal data for a subject be retrieved in a structured format? |
+| Rectification (Art. 16) | Verify correction capability across all stores per `standards/gdpr.md` §5. |
+| Erasure (Art. 17) | Verify deletion capability per `standards/gdpr.md` §5. Assess cascading deletions and referential integrity handling. |
+| Portability (Art. 20) | Verify export capability in machine-readable format per `standards/gdpr.md` §5. |
+| Restriction (Art. 18) | Verify processing restriction capability per `standards/gdpr.md` §5. |
+| Objection (Art. 21) | Verify objection capability for specific processing activities per `standards/gdpr.md` §5. |
 
 ### 2.3 Data Protection by Design (Article 25)
 
 | Aspect | What to evaluate |
 |---|---|
-| Encryption | Verify encryption at rest and in transit meets the requirements in `standards/gdpr.md` §4. |
-| Pseudonymisation | Assess whether pseudonymisation is applied where full identification is not required, per `standards/gdpr.md` §4. |
-| Access control | Verify personal data access controls per `standards/gdpr.md` §4. |
-| Logging | Verify access logging per `standards/gdpr.md` §4. Confirm logs themselves do not contain unmasked personal data. |
-| Breach detection | Verify breach detection and 72-hour notification capability per `standards/gdpr.md` §5. |
+| Encryption | Verify encryption at rest and in transit meets the requirements in `standards/gdpr.md` §7. |
+| Pseudonymisation | Assess whether pseudonymisation is applied where full identification is not required, per `standards/gdpr.md` §7. |
+| Access control | Verify personal data access controls per `standards/gdpr.md` §7. |
+| Logging | Verify access logging per `standards/gdpr.md` §3. Confirm logs themselves do not contain unmasked personal data. |
+| Breach detection | Verify breach detection and 72-hour notification capability per `standards/gdpr.md` §10. |
 
 ### 2.4 International Transfers (Chapter V)
 
