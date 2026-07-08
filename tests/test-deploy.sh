@@ -238,30 +238,34 @@ rm -rf "$TC4_DIR"
 echo ""
 echo "=== TC5: Idempotency ==="
 TC5_DIR=$(mktemp -d)
+TC5_CHECKSUMS1=$(mktemp)
+TC5_CHECKSUMS2=$(mktemp)
+TC5_PERMS1=$(mktemp)
+TC5_PERMS2=$(mktemp)
 
 "$REPO_DIR/deploy.sh" --agents all --overwrite "$TC5_DIR" >/dev/null 2>&1
-find "$TC5_DIR" -type f | sort | xargs sha256sum > /tmp/tc5_run1.txt
-find "$TC5_DIR" -type f -perm /111 | sort > /tmp/tc5_perms1.txt
+find "$TC5_DIR" -type f -exec sha256sum {} + | sort > "$TC5_CHECKSUMS1"
+find "$TC5_DIR" -type f -perm /111 | sort > "$TC5_PERMS1"
 
 "$REPO_DIR/deploy.sh" --agents all --overwrite "$TC5_DIR" >/dev/null 2>&1
-find "$TC5_DIR" -type f | sort | xargs sha256sum > /tmp/tc5_run2.txt
-find "$TC5_DIR" -type f -perm /111 | sort > /tmp/tc5_perms2.txt
+find "$TC5_DIR" -type f -exec sha256sum {} + | sort > "$TC5_CHECKSUMS2"
+find "$TC5_DIR" -type f -perm /111 | sort > "$TC5_PERMS2"
 
-if diff -q /tmp/tc5_run1.txt /tmp/tc5_run2.txt >/dev/null 2>&1; then
+if diff -q "$TC5_CHECKSUMS1" "$TC5_CHECKSUMS2" >/dev/null 2>&1; then
   pass "File checksums identical across both runs"
 else
   fail "File checksums differ between runs"
-  diff /tmp/tc5_run1.txt /tmp/tc5_run2.txt || true
+  diff "$TC5_CHECKSUMS1" "$TC5_CHECKSUMS2" || true
 fi
 
-if diff -q /tmp/tc5_perms1.txt /tmp/tc5_perms2.txt >/dev/null 2>&1; then
+if diff -q "$TC5_PERMS1" "$TC5_PERMS2" >/dev/null 2>&1; then
   pass "Executable permissions identical across both runs"
 else
   fail "Executable permissions differ between runs"
-  diff /tmp/tc5_perms1.txt /tmp/tc5_perms2.txt || true
+  diff "$TC5_PERMS1" "$TC5_PERMS2" || true
 fi
 
-rm -rf "$TC5_DIR" /tmp/tc5_run1.txt /tmp/tc5_run2.txt /tmp/tc5_perms1.txt /tmp/tc5_perms2.txt
+rm -rf "$TC5_DIR" "$TC5_CHECKSUMS1" "$TC5_CHECKSUMS2" "$TC5_PERMS1" "$TC5_PERMS2"
 
 # ═══════════════════════════════════════════════════════════════════════
 # TC6: validate-config passes — deployed copy

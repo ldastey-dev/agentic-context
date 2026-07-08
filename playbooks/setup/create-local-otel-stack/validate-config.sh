@@ -11,10 +11,6 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
-# Image versions — single source of truth
-# shellcheck source=versions.env
-source "$SCRIPT_DIR/versions.env"
-
 PASSED=0
 FAILED=0
 
@@ -97,7 +93,7 @@ assert_contains() {
     local file_path="$2"
     local expected="$3"
     
-    if grep -q "$expected" "$file_path"; then
+    if grep -qF -- "$expected" "$file_path"; then
         echo "  PASS: $test_name - contains '$expected'"
         PASSED=$((PASSED + 1))
         return 0
@@ -153,7 +149,7 @@ assert_contains "Image versions defined" "$SCRIPT_DIR/versions.env" "IMAGE_OTEL=
 echo ""
 echo "=== Checking docker-compose.yaml version variable substitution ==="
 for var in IMAGE_OTEL IMAGE_VM IMAGE_VL IMAGE_VT; do
-    if grep -q "\${${var}}" "$SCRIPT_DIR/docker-compose.yaml"; then
+    if grep -qF -- "\${${var}}" "$SCRIPT_DIR/docker-compose.yaml"; then
         echo "  PASS: docker-compose.yaml references \${${var}}"
         PASSED=$((PASSED + 1))
     else
