@@ -108,6 +108,17 @@ Combine multiple matches when a task spans domains.
 
 ---
 
+## Playbooks — Setup (operational setup procedures)
+
+| Keywords | File | Summary |
+|----------|------|---------|
+| create otel stack, local otel, set up opentelemetry, local telemetry, opentelemetry local | `.context/playbooks/setup/create-local-otel-stack.md` | Deploy a local OTel collector stack for development and testing |
+| discover otel stack, find otel stack, otel stack running | `.context/playbooks/setup/discover-local-otel-stack.md` | Discover and validate a running local OTel stack |
+| use otel stack, connect otel, send telemetry, otlp endpoint | `.context/playbooks/setup/use-local-otel-stack.md` | Configure services to emit to a local OTel stack |
+| instrument dotnet, dotnet otel, opentelemetry dotnet, dotnet sdk otel | `.context/playbooks/setup/instrument-dotnet-otel.md` | Instrument a .NET service with OpenTelemetry SDK |
+
+---
+
 ## Conventions (style and workflow guidance)
 
 | Keywords | File | Summary |
