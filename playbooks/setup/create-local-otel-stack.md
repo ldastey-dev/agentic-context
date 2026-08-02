@@ -16,6 +16,8 @@ Create and start a local OpenTelemetry observability stack for development and t
 
 ## Architecture
 
+> **Backend Flexibility:** VictoriaMetrics is the local stack reference implementation. Other OpenTelemetry-compatible backends (Grafana Tempo, Jaeger, Honeycomb, Datadog, AWS X-Ray) work equally well for the OTLP protocol. This stack is suitable for local development; adjust deployment and retention policies for staging/production.
+
 ```
 ┌────────────────────────────────────────────────────────────────────┐
 │                       Local OTel Stack                             │
@@ -305,11 +307,12 @@ To update component versions:
 
 Always test after version updates as APIs may change between major versions.
 
-## Related Skills
+## Related Playbooks and Standards
 
+- [OpenTelemetry Standard](../../standards/opentelemetry.md) — Core OTel principles and patterns
+- [OpenTelemetry .NET Standard](../../standards/opentelemetry-dotnet.md) — .NET SDK instrumentation patterns
 - [discover-local-otel-stack](discover-local-otel-stack.md) — Check whether a local OTel stack is running.
 - [use-local-otel-stack](use-local-otel-stack.md) — Configure OTLP endpoint and query the local stack.
-- [instrument-dotnet-otel](instrument-dotnet-otel.md) — Instrument a .NET app with the OTel SDK.
 
 ## External References
 

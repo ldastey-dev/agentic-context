@@ -138,10 +138,11 @@ For .NET applications using the `OpenTelemetry.Exporter.OpenTelemetryProtocol` p
 setting `options.Endpoint` explicitly in code can cause the SDK to send to `/` instead of
 `/v1/traces` or `/v1/metrics`.
 
-See [instrument-dotnet-otel](instrument-dotnet-otel.md) for the full explanation and fix.
+See the [OpenTelemetry .NET Standard](../../standards/opentelemetry-dotnet.md) for the full explanation and fix.
 
-## Related Skills
+## Related Playbooks and Standards
 
+- [OpenTelemetry Standard](../../standards/opentelemetry.md) — Core OTel principles and patterns
+- [OpenTelemetry .NET Standard](../../standards/opentelemetry-dotnet.md) — .NET SDK instrumentation patterns
 - [discover-local-otel-stack](discover-local-otel-stack.md) — Check whether a local OTel stack is running.
 - [create-local-otel-stack](create-local-otel-stack.md) — Start a new local OTel stack.
-- [instrument-dotnet-otel](instrument-dotnet-otel.md) — Instrument a .NET app with the OTel SDK.
