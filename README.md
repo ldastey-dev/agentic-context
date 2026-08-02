@@ -130,7 +130,18 @@ playbooks/                              Tier 2 — on demand (→ target .contex
     safe-refactor.md, extract-module.md, dependency-upgrade.md
   docs/                                 Developer-facing documentation generation (1)
     gitbook.md
+  setup/                                Setup and tooling playbooks (4)
+    create-local-otel-stack.md
+    create-local-otel-stack/            (companion scripts and configs — deployed alongside the playbook)
+    discover-local-otel-stack.md
+    use-local-otel-stack.md
+    instrument-dotnet-otel.md
 ```
+
+> Scripts in `playbooks/setup/create-local-otel-stack/` are deployed to
+> `.context/playbooks/setup/create-local-otel-stack/` alongside the playbook.
+> Playbook content references scripts at this path so agents can run them from
+> the repository root.
 
 ## Playbook Format
 

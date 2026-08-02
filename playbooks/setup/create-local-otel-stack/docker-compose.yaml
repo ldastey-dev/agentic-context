@@ -1,0 +1,82 @@
+version: '3.8'
+# Image versions are read from versions.env (the single source of truth).
+# Run with:  docker-compose --env-file versions.env up -d
+# Or set the IMAGE_* variables in your environment before running.
+# The ${IMAGE_VM} syntax is native Docker Compose variable substitution.
+
+services:
+  victoriametrics:
+    image: ${IMAGE_VM}
+    container_name: victoriametrics
+    ports:
+      - "127.0.0.1:8428:8428"
+    command:
+      - --storageDataPath=/storage
+    volumes:
+      - vm_data:/storage
+    networks:
+      - otel-stack
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8428/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  victorialogs:
+    image: ${IMAGE_VL}
+    container_name: victorialogs
+    ports:
+      - "127.0.0.1:9428:9428"
+    command:
+      - --storageDataPath=/vlogs
+    volumes:
+      - vl_data:/vlogs
+    networks:
+      - otel-stack
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:9428/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  victoriatraces:
+    image: ${IMAGE_VT}
+    container_name: victoriatraces
+    ports:
+      - "127.0.0.1:10428:10428"
+    command:
+      - --storageDataPath=/vtraces
+      - --servicegraph.enableTask=true
+    volumes:
+      - vt_data:/vtraces
+    networks:
+      - otel-stack
+
+  otel-collector:
+    image: ${IMAGE_OTEL}
+    container_name: otel-collector
+    ports:
+      - "127.0.0.1:4317:4317"  # OTLP gRPC receiver
+      - "127.0.0.1:4318:4318"  # OTLP HTTP receiver
+    volumes:
+      - ./otel-collector-config-compose.yaml:/etc/otel-collector-config.yml:ro
+    command:
+      - --config=/etc/otel-collector-config.yml
+    networks:
+      - otel-stack
+    depends_on:
+      victoriametrics:
+        condition: service_healthy
+      victorialogs:
+        condition: service_healthy
+      victoriatraces:
+        condition: service_started
+
+volumes:
+  vm_data:
+  vl_data:
+  vt_data:
+
+networks:
+  otel-stack:
+    driver: bridge

@@ -594,6 +594,7 @@ if ((Test-AgentEnabled 'claude') -or (Test-AgentEnabled 'copilot')) {
         @{ Dir = 'plan';     Tools = $null }
         @{ Dir = 'refactor'; Tools = $null }
         @{ Dir = 'docs';     Tools = $null }
+        @{ Dir = 'setup';    Tools = 'Read, Grep, Glob, Bash, Write, Edit, Agent' }
     )
 
     foreach ($category in $playbookCategories) {

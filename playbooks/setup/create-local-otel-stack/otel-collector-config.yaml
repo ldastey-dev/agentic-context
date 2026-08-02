@@ -1,0 +1,66 @@
+# Host Local OTel Stack Collector — backend router
+# Runs on the developer's host as part of the local observability stack.
+# Receives OTLP telemetry on :4318 (HTTP) / :4317 (gRPC) and routes it
+# to the Victoria* backends (VictoriaMetrics, VictoriaLogs, VictoriaTraces).
+#
+# See also: otel-collector-sidecar-config.yaml (the in-container forwarder
+# that sends telemetry from agent containers to this collector).
+receivers:
+  otlp:
+    protocols:
+      http:
+        endpoint: "0.0.0.0:4318"
+        cors:
+          allowed_origins: ["http://localhost:*", "http://127.0.0.1:*"]
+      grpc:
+        endpoint: "0.0.0.0:4317"
+  hostmetrics:
+    collection_interval: 15s
+    scrapers:
+      cpu:
+      memory:
+      disk:
+      network:
+
+exporters:
+  otlphttp/victoriametrics:
+    metrics_endpoint: "http://localhost:8428/opentelemetry/v1/metrics"
+    tls:
+      insecure: true
+  otlphttp/victorialogs:
+    logs_endpoint: "http://localhost:9428/insert/opentelemetry/v1/logs"
+    tls:
+      insecure: true
+  otlphttp/victoriatraces:
+    traces_endpoint: "http://localhost:10428/insert/opentelemetry/v1/traces"
+    tls:
+      insecure: true
+
+processors:
+  memory_limiter:
+    check_interval: 1s
+    limit_mib: 256
+    spike_limit_mib: 64
+  batch:
+    timeout: 5s
+    send_batch_size: 1024
+
+extensions:
+  health_check:
+    endpoint: "0.0.0.0:13133"
+
+service:
+  extensions: [health_check]
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter, batch]
+      exporters: [otlphttp/victoriatraces]
+    metrics:
+      receivers: [otlp, hostmetrics]
+      processors: [memory_limiter, batch]
+      exporters: [otlphttp/victoriametrics]
+    logs:
+      receivers: [otlp]
+      processors: [memory_limiter, batch]
+      exporters: [otlphttp/victorialogs]
