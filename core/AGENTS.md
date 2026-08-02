@@ -158,6 +158,8 @@ The following standards are non-negotiable. Do not weaken them. Detailed guidanc
 | ADO Pipelines | Triggers, templates, environments, approvals | `.context/standards/ado-pipelines.md` |
 | Docker | Multi-stage builds, layer optimisation, scanning | `.context/standards/docker.md` |
 | Playwright | Page Object Model, semantic locators, auto-waiting, fixtures | `.context/standards/playwright.md` |
+| OpenTelemetry | Cross-language SDK patterns, OTLP protocol, backends | `.context/standards/opentelemetry.md` |
+| OpenTelemetry .NET | .NET instrumentation, pitfalls, testing patterns | `.context/standards/opentelemetry-dotnet.md` |
 
 ---
 
