@@ -36,6 +36,8 @@ Combine multiple matches when a task spans domains.
 | ADO, Azure DevOps, pipeline, YAML pipeline, version, versioning, SemVer, build number | `.context/standards/ado-pipelines.md` | Triggers, templates, environments, approvals, build versioning |
 | Docker, Dockerfile, container, image, compose | `.context/standards/docker.md` | Multi-stage builds, layer optimisation, scanning |
 | Playwright, E2E, end-to-end, page object, fixture, auto-waiting | `.context/standards/playwright.md` | Page Object Model, semantic locators, auto-waiting, fixtures, sharding |
+| OpenTelemetry, OTEL, observability SDK, instrumentation, traces metrics logs, OTLP | `.context/standards/opentelemetry.md` | Language-agnostic OTel SDK principles, patterns, OTLP protocol, backends |
+| OpenTelemetry .NET, OTEL .NET, .NET instrumentation, dotnet otel | `.context/standards/opentelemetry-dotnet.md` | OpenTelemetry SDK instrumentation patterns and anti-patterns for .NET |
 
 ---
 
@@ -115,7 +117,6 @@ Combine multiple matches when a task spans domains.
 | create otel stack, local otel, set up opentelemetry, local telemetry, opentelemetry local | `.context/playbooks/setup/create-local-otel-stack.md` | Deploy a local OTel collector stack for development and testing |
 | discover otel stack, find otel stack, otel stack running | `.context/playbooks/setup/discover-local-otel-stack.md` | Discover and validate a running local OTel stack |
 | use otel stack, connect otel, send telemetry, otlp endpoint | `.context/playbooks/setup/use-local-otel-stack.md` | Configure services to emit to a local OTel stack |
-| instrument dotnet, dotnet otel, opentelemetry dotnet, dotnet sdk otel | `.context/playbooks/setup/instrument-dotnet-otel.md` | Instrument a .NET service with OpenTelemetry SDK |
 
 ---
 

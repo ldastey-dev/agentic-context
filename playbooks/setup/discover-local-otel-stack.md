@@ -84,8 +84,9 @@ If the stack is running, confirm telemetry data is being received:
 
 Empty arrays indicate the stack is up but no telemetry has been sent yet.
 
-## Related Skills
+## Related Playbooks and Standards
 
+- [OpenTelemetry Standard](../../standards/opentelemetry.md) — Core OTel principles and patterns
+- [OpenTelemetry .NET Standard](../../standards/opentelemetry-dotnet.md) — .NET SDK instrumentation patterns
 - [create-local-otel-stack](create-local-otel-stack.md) — Start a new local OTel stack.
 - [use-local-otel-stack](use-local-otel-stack.md) — Configure OTLP endpoint and query the local stack.
-- [instrument-dotnet-otel](instrument-dotnet-otel.md) — Instrument a .NET app with the OTel SDK.
