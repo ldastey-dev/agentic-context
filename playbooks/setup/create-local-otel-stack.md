@@ -18,7 +18,7 @@ Create and start a local OpenTelemetry observability stack for development and t
 
 > **Backend Flexibility:** VictoriaMetrics is the local stack reference implementation. Other OpenTelemetry-compatible backends (Grafana Tempo, Jaeger, Honeycomb, Datadog, AWS X-Ray) work equally well for the OTLP protocol. This stack is suitable for local development; adjust deployment and retention policies for staging/production.
 
-```
+```text
 ┌────────────────────────────────────────────────────────────────────┐
 │                       Local OTel Stack                             │
 │                                                                    │
@@ -29,8 +29,8 @@ Create and start a local OpenTelemetry observability stack for development and t
 │  └─────────────────┘    │  VictoriaTraces   :10428 (Jaeger)   │  │
 │                          └──────────────────────────────────────┘  │
 └────────────────────────────────────────────────────────────────────┘
-```
 
+```text
 | Component | Image | Port | Purpose |
 |-----------|-------|------|---------|
 | OTel Collector | `ghcr.io/open-telemetry/opentelemetry-collector-releases/opentelemetry-collector-contrib:0.133.0` | 4317 (gRPC), 4318 (HTTP) | Receives OTLP, routes to backends |
@@ -50,7 +50,7 @@ In this scenario:
 Agent instrumentation:
 ```bash
 export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318
-```
+```text
 (pointing at the in-container sidecar, which forwards to `host.containers.internal:4318`)
 
 Sidecar config (`otel-collector-sidecar-config.yaml`):
@@ -62,8 +62,8 @@ Sidecar config (`otel-collector-sidecar-config.yaml`):
 No sidecar required. Agents connect directly:
 ```bash
 export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318
-```
 
+```text
 ## Container Runtime Examples
 
 ### Podman (pod-based, no compose)
@@ -77,8 +77,8 @@ export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318
 
 # Force recreate if already running
 .context/playbooks/setup/create-local-otel-stack/start-local-otel-stack.sh --force
-```
 
+```text
 Uses shared network namespace: containers communicate via `localhost`.
 
 ### Docker (user-defined bridge network)
@@ -111,8 +111,8 @@ docker run -d --network otel-stack --name otel-collector \
   -v ./otel-collector-config-compose.yaml:/etc/otel-collector-config.yml:ro \
   ghcr.io/open-telemetry/opentelemetry-collector-releases/opentelemetry-collector-contrib:0.133.0 \
   --config=/etc/otel-collector-config.yml
-```
 
+```text
 Uses service names for inter-container communication (e.g., `victoriametrics:8428`).
 
 ### Docker Compose / Podman Compose
@@ -133,8 +133,8 @@ docker-compose -f "$COMPOSE/docker-compose.yaml" --env-file "$COMPOSE/versions.e
 
 # Restart specific service
 docker-compose -f "$COMPOSE/docker-compose.yaml" --env-file "$COMPOSE/versions.env" restart otel-collector
-```
 
+```text
 Automatically creates network; uses service names for communication.
 
 ### Rancher Desktop (nerdctl)
@@ -143,8 +143,8 @@ Same syntax as Docker, but use `nerdctl` instead of `docker`:
 ```bash
 nerdctl network create otel-stack
 nerdctl run -d --network otel-stack --name victoriametrics ...
-```
 
+```text
 ## Configuration Files
 
 ### versions.env
@@ -181,8 +181,8 @@ Docker Compose-specific collector configuration:
 
 ```bash
 .context/playbooks/setup/create-local-otel-stack/validate-config.sh
-```
 
+```text
 ### Full smoke test (requires Podman)
 
 Run the smoke test to verify the stack works end-to-end:
@@ -190,8 +190,8 @@ Run the smoke test to verify the stack works end-to-end:
 ```bash
 # Run from the skill directory on Linux (requires podman):
 .context/playbooks/setup/create-local-otel-stack/test-local-otel-stack.sh
-```
 
+```text
 The script will:
 1. Force-clean any leftover containers from a previous run (idempotent pre-flight)
 2. Start the stack
@@ -218,8 +218,8 @@ Use the PowerShell script for Windows environments:
 
 # Force recreate
 .\.context\playbooks\setup\create-local-otel-stack\Start-LocalOtelStack.ps1 -Force
-```
 
+```text
 ### macOS
 
 Same commands as Linux, but you may need to use `docker` instead of `podman` if Podman is not installed.
@@ -244,8 +244,8 @@ If the start script or smoke test exited uncleanly (e.g. killed with SIGKILL in 
 
 # PowerShell
 .\.context\playbooks\setup\create-local-otel-stack\Start-LocalOtelStack.ps1 -ForceCleanup
-```
 
+```text
 If the scripts themselves are broken, clean up manually:
 
 ```bash
@@ -256,8 +256,8 @@ podman rm -f otel-collector victoriametrics victorialogs victoriatraces
 # Docker
 docker rm -f otel-collector victoriametrics victorialogs victoriatraces
 docker network rm otel-stack
-```
 
+```text
 ### Port conflicts (other services)
 
 If ports are already in use by a different service, the start script will fail. You can either:
@@ -276,8 +276,8 @@ podman logs otel-collector
 # Docker
 docker logs victoriametrics
 docker logs otel-collector
-```
 
+```text
 ### Health check failures
 
 If backends don't become healthy within 30 seconds:

@@ -106,8 +106,8 @@ resource = mergeDefaultResource({
   "deployment.environment": "staging"
 })
 provider = createTelemetryProvider(resource=resource)
-```
 
+```text
 ### 2.2 · Tracing (Spans)
 
 A span represents one logical unit of work. SDK implementations may differ in syntax,
@@ -149,8 +149,8 @@ with tracer.startSpan("invoice.generate") as span:
     span.recordException(error)
     span.setStatus(ERROR, error.message)
     raise
-```
 
+```text
 ### 2.3 · Metrics (Instruments)
 
 Metrics must be emitted through the OpenTelemetry metrics API where the SDK supports it.
@@ -182,8 +182,8 @@ requestLatency = meter.createHistogram("operation.duration", unit="ms")
 
 requestCount.add(1, {"operation.name": "invoice.generate", "operation.status": "ok"})
 requestLatency.record(142.3, {"operation.name": "invoice.generate"})
-```
 
+```text
 ### 2.4 · Logs (Structured Logging)
 
 Logs must be structured and machine-readable. JSON lines is the recommended interchange
@@ -220,8 +220,8 @@ the active span context.
     "error.type": "TimeoutError"
   }
 }
-```
 
+```text
 ---
 
 ## 3 · OTLP Protocol
@@ -277,14 +277,14 @@ Per-signal overrides:
 ```text
 OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318
 OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf
-```
 
+```
 ```text
 OTEL_EXPORTER_OTLP_TRACES_ENDPOINT=http://collector.internal:4318/v1/traces
 OTEL_EXPORTER_OTLP_METRICS_ENDPOINT=http://collector.internal:4318/v1/metrics
 OTEL_EXPORTER_OTLP_LOGS_ENDPOINT=http://collector.internal:4318/v1/logs
-```
 
+```text
 ### 3.4 · Protocol Selection Rationale
 
 Choose gRPC by default when the runtime, network path, and collector all support it
@@ -399,8 +399,8 @@ for example:
 ```text
 OTEL_EXPORTER_OTLP_ENDPOINT=http://collector-host:4318
 OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf
-```
 
+```text
 Applications must not assume `localhost` outside local development.
 
 ### Sidecar Pattern
@@ -440,8 +440,8 @@ Example header:
 
 ```http
 traceparent: 00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01
-```
 
+```bash
 Use the OpenTelemetry propagator APIs rather than hand-building headers. Support legacy
 formats such as Jaeger propagation only when an integration explicitly requires it.
 W3C Trace Context must remain the default.

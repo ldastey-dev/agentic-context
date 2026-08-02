@@ -17,14 +17,14 @@ dotnet add package OpenTelemetry.Extensions.Hosting
 dotnet add package OpenTelemetry.Instrumentation.AspNetCore
 dotnet add package OpenTelemetry.Instrumentation.Http
 dotnet add package OpenTelemetry.Exporter.OpenTelemetryProtocol
-```
 
+```text
 For integration tests that assert exported spans directly:
 
 ```bash
 dotnet add package OpenTelemetry.Exporter.InMemory
-```
 
+```text
 Each package has a distinct responsibility:
 
 - `OpenTelemetry.Extensions.Hosting` must be used to integrate `TracerProvider`, `MeterProvider`, and logging with the .NET hosting model and dependency injection container.
@@ -99,8 +99,8 @@ services.AddOpenTelemetry()
             options.IncludeFormattedMessage = true;  // export the rendered log string, not just the template
             options.IncludeScopes = true;            // include ILogger.BeginScope() data as log attributes
         });
-```
 
+```text
 This pattern must be preserved for production services.
 
 Tracing guidance:
@@ -148,8 +148,8 @@ OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf
 
 # Optional: override the service name set in code
 OTEL_SERVICE_NAME=my-service
-```
 
+```text
 ### 3.2 · gRPC vs HTTP/Protobuf
 
 Protocol choice must be deliberate:
@@ -203,8 +203,8 @@ var tracerProvider = server.Services.GetService<TracerProvider>();
 tracerProvider.ForceFlush();
 
 Assert.That(exportedActivities, Is.Not.Empty);
-```
 
+```text
 This pattern must be preferred because:
 
 - `ConfigureOpenTelemetryTracerProvider` adds the in-memory exporter alongside the production startup configuration instead of replacing it entirely.
@@ -222,8 +222,8 @@ Test project package reference:
 
 ```xml
 <PackageReference Include="OpenTelemetry.Exporter.InMemory" Version="1.*" />
-```
 
+```text
 ### 4.2 · Collector-Backed Integration Tests
 
 When validating end-to-end exporter connectivity, teams should use the local stack playbooks rather than ad hoc collector setup. Those playbooks define the standard approach for creating, discovering, and using a local OpenTelemetry stack.
@@ -240,11 +240,11 @@ When validating end-to-end exporter connectivity, teams should use the local sta
 on port 4318 and `/v1/traces` returns 415 (correct — expects a protobuf body).
 
 App logs:
-```
+```text
 Sending HTTP request "POST" "http://host.containers.internal:4318/"
 Received HTTP response headers after 4.7ms - 404
-```
 
+```text
 **Root cause:** When `options.Endpoint` is set explicitly, `new Uri("http://host:4318")` normalises
 to `http://host:4318/` (trailing slash). The SDK sees a path component (`/`) and treats it as a
 user-specified custom path, so it does **not** append `/v1/traces`, `/v1/metrics`, etc.
@@ -258,19 +258,19 @@ this correctly.
     options.Endpoint = new Uri(otelConfig.OtlpEndpoint);  // DO NOT do this
     options.Protocol = OtlpExportProtocol.HttpProtobuf;
 })
-```
 
+```text
 **Fix:** Remove the lambda entirely:
 ```csharp
 .AddOtlpExporter()
-```
 
+```text
 Set the endpoint via environment variable instead:
-```
+```bash
 OTEL_EXPORTER_OTLP_ENDPOINT=http://host.containers.internal:4318
 OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf
-```
 
+```text
 **If you must set the endpoint in code**, append the signal path yourself:
 ```csharp
 .WithTracing(builder => builder
@@ -291,7 +291,7 @@ OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf
         options.Endpoint = new Uri(otelConfig.OtlpEndpoint + "/v1/logs");
         options.Protocol = OtlpExportProtocol.HttpProtobuf;
     }))
-```
+```text
 This is fragile. Prefer env vars.
 
 ### Pitfall 2: gRPC (port 4317) unreachable via `host.containers.internal`
@@ -313,22 +313,22 @@ WSL2/container environments, even when the HTTP port (4318) on the same collecto
 
 **Fix:** Use HTTP/protobuf on port 4318 when using `host.containers.internal`:
 
-```
+```bash
 OTEL_EXPORTER_OTLP_ENDPOINT=http://host.containers.internal:4318
 OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf
-```
 
+```text
 For localhost (direct container or local dev), gRPC on port 4317 works fine and is the SDK default.
 
 ### Pitfall 3: `ActivityListener` flaky in integration test suites
 
 **Symptom:** An integration test using `ActivityListener` to capture OTel spans passes when run
 alone but fails intermittently in the full test suite:
-```
+```text
 Expected: not <empty>
 But was:  < <System.Diagnostics.Activity> >
-```
 
+```text
 **Root cause:** `ActivityListener` and `ActivitySource` are global statics. When other tests create
 `TestServer` instances that initialise `TracerProvider`, the global activity state is polluted.
 Test execution order affects which listener captures which activities.
@@ -351,8 +351,8 @@ var tracerProvider = server.Services.GetService<TracerProvider>();
 tracerProvider.ForceFlush();
 
 Assert.That(exportedActivities, Is.Not.Empty);
-```
 
+```text
 Key points:
 - `ConfigureOpenTelemetryTracerProvider` adds the in-memory exporter alongside Startup.cs config.
 - `ForceFlush()` ensures all spans are exported before asserting.
@@ -361,8 +361,8 @@ Key points:
 Test project package reference:
 ```xml
 <PackageReference Include="OpenTelemetry.Exporter.InMemory" Version="1.*" />
-```
 
+```text
 ---
 
 ## Related Standards
