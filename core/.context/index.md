@@ -75,6 +75,7 @@ Combine multiple matches when a task spans domains.
 | review compliance, compliance review | `.context/playbooks/review/compliance.md` | Data handling, encryption, audit compliance |
 | review IaC, infrastructure review | `.context/playbooks/review/iac.md` | Infrastructure code patterns and security |
 | review observability, observability review | `.context/playbooks/review/observability.md` | Logging, tracing, metrics instrumentation |
+| review cost, FinOps audit, cost review, resource optimisation | `.context/playbooks/review/cost-optimisation.md` | API economy, dependencies, observability spend |
 | review performance, performance review | `.context/playbooks/review/performance.md` | Query efficiency, caching, resource disposal |
 | review security, security review | `.context/playbooks/review/security.md` | OWASP, secrets, injection vectors |
 | review test coverage, test review | `.context/playbooks/review/test-coverage.md` | Test quality, coverage gaps, coupling |
