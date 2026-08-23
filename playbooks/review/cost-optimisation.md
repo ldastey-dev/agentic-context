@@ -1,7 +1,7 @@
 ---
 name: review-cost-optimisation
 description: "Cost optimisation review checking API economy, dependency footprint, resource efficiency, LLM token costs, and observability spend in changed code"
-keywords: [review cost, cost review, finops review, resource optimisation]
+keywords: [review cost, cost review, FinOps audit, resource optimisation]
 ---
 
 # Cost Optimisation Review
@@ -107,13 +107,6 @@ For each issue found:
 ## Standards Reference
 
 Apply the criteria defined in `standards/cost-optimisation.md`. Flag any deviation as a finding.
-
-Key principles to enforce:
-
-- **Cache before network** — Every read must check cache first
-- **Bound every output** — No unbounded result sets
-- **Measure what you spend** — `duration_ms` and `cache_hit` logging on expensive operations
-- **Small savings compound** — A 10% payload reduction matters at scale
 
 ---
 
