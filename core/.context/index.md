@@ -38,6 +38,7 @@ Combine multiple matches when a task spans domains.
 | Playwright, E2E, end-to-end, page object, fixture, auto-waiting | `.context/standards/playwright.md` | Page Object Model, semantic locators, auto-waiting, fixtures, sharding |
 | OpenTelemetry, OTEL, observability SDK, instrumentation, traces metrics logs, OTLP | `.context/standards/opentelemetry.md` | Language-agnostic OTel SDK principles, patterns, OTLP protocol, backends |
 | OpenTelemetry .NET, OTEL .NET, .NET instrumentation, dotnet otel | `.context/standards/opentelemetry-dotnet.md` | OpenTelemetry SDK instrumentation patterns and anti-patterns for .NET |
+| debug, debugging, bug, reproduce, failing test, crash | `.context/standards/debugging.md` | Scientific debugging method: STABILISE → LOCATE → HYPOTHESISE → EXPERIMENT → FIX → TEST → SEARCH |
 
 ---
 
@@ -90,6 +91,7 @@ Combine multiple matches when a task spans domains.
 | design doc, technical design, design document | `.context/playbooks/plan/design-doc.md` | Technical Design Document |
 | risk assessment, risk register, risk analysis | `.context/playbooks/plan/risk-assessment.md` | Risk identification and mitigation |
 | spike, investigation, proof of concept, PoC | `.context/playbooks/plan/spike.md` | Timeboxed technical investigation |
+| research, clarify, requirements, discover needs, user wants | `.context/playbooks/plan/research.md` | Facilitated requirements clarification and confirmed problem statement |
 
 ---
 
@@ -118,6 +120,14 @@ Combine multiple matches when a task spans domains.
 | create otel stack, local otel, set up opentelemetry, local telemetry, opentelemetry local | `.context/playbooks/setup/create-local-otel-stack.md` | Deploy a local OTel collector stack for development and testing |
 | discover otel stack, find otel stack, otel stack running | `.context/playbooks/setup/discover-local-otel-stack.md` | Discover and validate a running local OTel stack |
 | use otel stack, connect otel, send telemetry, otlp endpoint | `.context/playbooks/setup/use-local-otel-stack.md` | Configure services to emit to a local OTel stack |
+
+---
+
+## Playbooks — Debugging (structured defect resolution)
+
+| Keywords | File | Summary |
+|----------|------|---------|
+| debug, debugging, bug, failing test, crash, error, fix | `.context/playbooks/debug/debug.md` | Scientific debugging runbook: reproduce, locate, fix, verify, search |
 
 ---
 
