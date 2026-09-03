@@ -4,6 +4,25 @@ BeforeAll {
     . (Join-Path $PSScriptRoot 'deploy.ps1')
 }
 
+Describe 'deploy.ps1 (Windows PowerShell 5.1 compatibility)' {
+    # deploy.ps1 has no BOM, so Windows PowerShell 5.1 reads it using the system ANSI codepage
+    # (Windows-1252) instead of UTF-8. Some Unicode punctuation - e.g. an em dash - decodes under
+    # that codepage into a "smart quote" character (U+2018/2019/201C/201D), which PowerShell's
+    # tokenizer accepts as an alternate string/char delimiter, corrupting the parse. This test
+    # simulates that misread directly and catches any future non-ASCII character reintroducing
+    # the same failure mode, regardless of which line it lands on.
+    It 'parses cleanly when read as Windows-1252 (no-BOM fallback encoding)' {
+        $bytes = [System.IO.File]::ReadAllBytes((Join-Path $PSScriptRoot 'deploy.ps1'))
+        $misreadText = [System.Text.Encoding]::GetEncoding(1252).GetString($bytes)
+
+        $tokens = $null
+        $parseErrors = $null
+        [System.Management.Automation.Language.Parser]::ParseInput($misreadText, [ref]$tokens, [ref]$parseErrors) | Out-Null
+
+        $parseErrors | Should -BeNullOrEmpty
+    }
+}
+
 Describe 'Test-IsUtf8Compatible' {
     BeforeAll {
         $TestDir = New-Item -ItemType Directory -Path (Join-Path ([System.IO.Path]::GetTempPath()) "deploy-tests-$([System.Guid]::NewGuid())") -Force
