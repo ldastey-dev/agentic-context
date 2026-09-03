@@ -1,0 +1,62 @@
+name: deploy.ps1 tests
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'deploy.ps1'
+      - 'deploy.Tests.ps1'
+      - 'PSScriptAnalyzerSettings.psd1'
+      - 'tests/**'
+      - 'core/**'
+      - 'standards/**'
+      - 'playbooks/**'
+      - '.github/workflows/deploy-ps1-tests.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'deploy.ps1'
+      - 'deploy.Tests.ps1'
+      - 'PSScriptAnalyzerSettings.psd1'
+      - 'tests/**'
+      - 'core/**'
+      - 'standards/**'
+      - 'playbooks/**'
+      - '.github/workflows/deploy-ps1-tests.yml'
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Windows PowerShell 5.1 is the host that reported both bugs this workflow guards
+          # against (the BOM-less Windows-1252 parse break, and Add-Type's CurrentDirectory
+          # side effect) - it must be tested directly, not simulated.
+          - os: windows-latest
+            shell: powershell
+            name: windows-powershell-5.1
+          - os: windows-latest
+            shell: pwsh
+            name: windows-pwsh
+          - os: ubuntu-latest
+            shell: pwsh
+            name: ubuntu-pwsh
+    runs-on: ${{ matrix.os }}
+    name: ${{ matrix.name }}
+    defaults:
+      run:
+        shell: ${{ matrix.shell }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install test dependencies
+        run: |
+          Install-Module -Name Pester -MinimumVersion 5.0 -Force -SkipPublisherCheck -Scope CurrentUser
+          Install-Module -Name PSScriptAnalyzer -Force -SkipPublisherCheck -Scope CurrentUser
+
+      - name: Run Pester unit tests
+        run: Invoke-Pester -Path ./deploy.Tests.ps1 -CI
+
+      - name: Run end-to-end deploy tests
+        run: pwsh ./tests/test-deploy.ps1
