@@ -4,6 +4,8 @@ BeforeAll {
     . (Join-Path $PSScriptRoot 'deploy.ps1')
 }
 
+$script:PSScriptAnalyzerAvailable = [bool](Get-Module -ListAvailable -Name PSScriptAnalyzer)
+
 Describe 'deploy.ps1 (Windows PowerShell 5.1 compatibility)' {
     # deploy.ps1 has no BOM, so Windows PowerShell 5.1 reads it using the system ANSI codepage
     # (Windows-1252) instead of UTF-8. Some Unicode punctuation - e.g. an em dash - decodes under
@@ -20,6 +22,21 @@ Describe 'deploy.ps1 (Windows PowerShell 5.1 compatibility)' {
         [System.Management.Automation.Language.Parser]::ParseInput($misreadText, [ref]$tokens, [ref]$parseErrors) | Out-Null
 
         $parseErrors | Should -BeNullOrEmpty
+    }
+}
+
+Describe 'deploy.ps1 (PowerShell version/platform compatibility)' {
+    # Catches syntax or commands/parameters that don't exist on a target PowerShell version or
+    # platform - e.g. a PS7-only operator that would break Windows PowerShell 5.1, or a cmdlet
+    # parameter not yet available on an older baseline. Skipped (not failed) if PSScriptAnalyzer
+    # isn't installed locally; run `Install-Module PSScriptAnalyzer -Scope CurrentUser` to enable
+    # it. This is a static check - it does not catch semantic/runtime issues like Add-Type
+    # resetting [Environment]::CurrentDirectory, which is why the compatibility test above and
+    # TC5 in tests/test-deploy.ps1 exist separately.
+    It 'has no PSScriptAnalyzer compatibility findings for Windows PowerShell 5.1 / PowerShell 7.0' -Skip:(-not $script:PSScriptAnalyzerAvailable) {
+        Import-Module PSScriptAnalyzer
+        $results = Invoke-ScriptAnalyzer -Path (Join-Path $PSScriptRoot 'deploy.ps1') -Settings (Join-Path $PSScriptRoot 'PSScriptAnalyzerSettings.psd1')
+        $results | Should -BeNullOrEmpty
     }
 }
 
