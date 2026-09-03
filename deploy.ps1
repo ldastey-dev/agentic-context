@@ -127,7 +127,7 @@ function Confirm-Overwrite {
         }
     }
 
-    # Non-interactive → safe default (skip)
+    # Non-interactive -> safe default (skip)
     $isInteractive = $false
     try {
         $isInteractive = [Environment]::UserInteractive -and -not [Console]::IsInputRedirected
@@ -173,7 +173,7 @@ function Test-IsUtf8Compatible {
         if ($read -ge 2 -and $bom[0] -eq 0xFE -and $bom[1] -eq 0xFF) { return $false }                                              # UTF-16 BE
         return $true
     } catch {
-        Write-Warning "Test-IsUtf8Compatible: could not read '$resolvedPath' — $_. Falling back to Copy-Item."
+        Write-Warning "Test-IsUtf8Compatible: could not read '$resolvedPath' - $_. Falling back to Copy-Item."
         return $false
     }
 }
@@ -216,7 +216,7 @@ function Enable-VirtualTerminal {
     # Returns $true if ANSI escape sequences are usable on stdout. On non-Windows
     # hosts this is always true; on Windows it requires ENABLE_VIRTUAL_TERMINAL_PROCESSING,
     # which we set via kernel32!SetConsoleMode. Returns $false if the API isn't
-    # available (e.g. constrained language mode) or the call fails — callers should
+    # available (e.g. constrained language mode) or the call fails - callers should
     # refuse to render ANSI in that case rather than print literal escape text.
     $onWindows = ($PSVersionTable.PSVersion.Major -le 5) -or $IsWindows
     if (-not $onWindows) { return $true }
