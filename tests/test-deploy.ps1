@@ -203,6 +203,39 @@ Assert-FileExists "assess-observability" "$tc4Dir/.claude/skills/assess-observab
 Remove-Item -Recurse -Force $tc4Dir
 
 # ═══════════════════════════════════════════════════════════════════════
+# TC5: Relative -TargetRepo survives [Environment]::CurrentDirectory corruption
+# ═══════════════════════════════════════════════════════════════════════
+# Add-Type (used by Enable-VirtualTerminal for the interactive agent menu) resets
+# [Environment]::CurrentDirectory as a side effect on Windows. This reproduces that
+# corruption directly (no real interactive console needed) and proves a relative
+# -TargetRepo still resolves against PowerShell's actual working directory rather
+# than silently landing under the corrupted one.
+Write-Host ""
+Write-Host "=== TC5: Relative -TargetRepo survives CurrentDirectory corruption ==="
+$tc5Base = Join-Path ([System.IO.Path]::GetTempPath()) "tc5-$([guid]::NewGuid().ToString('N').Substring(0,8))"
+$tc5Launch = Join-Path $tc5Base "launch"
+$tc5CorruptParent = Join-Path $tc5Base "corrupt-parent"
+$tc5Corrupt = Join-Path $tc5CorruptParent "corrupt"
+$tc5CorrectTarget = Join-Path $tc5Base "reltarget"
+New-Item -ItemType Directory -Path $tc5Launch, $tc5Corrupt, $tc5CorrectTarget -Force | Out-Null
+
+$originalCwd = (Get-Location).Path
+$originalCurrentDirectory = [Environment]::CurrentDirectory
+try {
+    Set-Location $tc5Launch
+    [Environment]::CurrentDirectory = $tc5Corrupt
+    & "$RepoDir/deploy.ps1" -Agents claude -Overwrite -Target "../reltarget" *>$null
+} finally {
+    Set-Location $originalCwd
+    [Environment]::CurrentDirectory = $originalCurrentDirectory
+}
+
+Assert-FileExists "AGENTS.md deployed relative to launch dir" "$tc5CorrectTarget/AGENTS.md"
+Assert-FileNotExists "AGENTS.md NOT deployed relative to corrupted CurrentDirectory" "$tc5CorruptParent/reltarget/AGENTS.md"
+
+Remove-Item -Recurse -Force $tc5Base
+
+# ═══════════════════════════════════════════════════════════════════════
 # Summary
 # ═══════════════════════════════════════════════════════════════════════
 Write-Host ""

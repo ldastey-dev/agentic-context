@@ -231,6 +231,11 @@ public static extern bool GetConsoleMode(System.IntPtr hConsoleHandle, out uint 
 [System.Runtime.InteropServices.DllImport("kernel32.dll", SetLastError = true)]
 public static extern bool SetConsoleMode(System.IntPtr hConsoleHandle, uint dwMode);
 '@
+            # Add-Type compiles the above via an external process, which resets
+            # [Environment]::CurrentDirectory (observed jumping to C:\WINDOWS\System32) as a
+            # side effect. Restore it so relative-path .NET file I/O elsewhere in the script
+            # keeps resolving against PowerShell's actual working directory.
+            [System.Environment]::CurrentDirectory = (Get-Location).Path
         }
 
         $STD_OUTPUT_HANDLE = -11
@@ -521,8 +526,14 @@ Resolve-SelectedAgents -Selected $Agents
 
 if (-not $TargetRepo) {
     $script:Target = (Get-Location).Path
-} else {
+} elseif ([System.IO.Path]::IsPathRooted($TargetRepo)) {
     $script:Target = $TargetRepo
+} else {
+    # Resolve relative to PowerShell's working directory rather than letting .NET fall back to
+    # [Environment]::CurrentDirectory. Add-Type (invoked by Enable-VirtualTerminal for the
+    # interactive menu) resets that process-wide value on Windows, which would otherwise silently
+    # redirect every subsequent relative-path file operation to the wrong directory.
+    $script:Target = [System.IO.Path]::GetFullPath((Join-Path (Get-Location).Path $TargetRepo))
 }
 
 if (-not (Test-Path $script:Target -PathType Container)) {
