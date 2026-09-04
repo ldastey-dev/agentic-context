@@ -104,6 +104,7 @@ standards/                              Tier 3 — reference (→ target .contex
   pci-dss.md                            PCI DSS payment card data standards
   accessibility.md                      WCAG 2.2 Level AA accessibility standards
   architecture.md                       Clean Architecture, dependency direction, layers
+  debugging.md                          Scientific method for defect resolution
   iac.md                                Infrastructure as Code, state, containers, policy
   tech-debt.md                          Debt taxonomy, impact scoring, paydown strategy
   dotnet.md                             C#, ASP.NET Core, EF Core, async patterns
@@ -124,10 +125,12 @@ playbooks/                              Tier 2 — on demand (→ target .contex
     accessibility.md, api-design.md, architecture.md, code-quality.md,
     compliance.md, iac.md, observability.md, performance.md,
     security.md, test-coverage.md
-  plan/                                 Design and decision documents (4)
-    adr.md, design-doc.md, risk-assessment.md, spike.md
+  plan/                                 Design and decision documents (5)
+    adr.md, design-doc.md, research.md, risk-assessment.md, spike.md
   refactor/                             Structured code change procedures (3)
     safe-refactor.md, extract-module.md, dependency-upgrade.md
+  debug/                                Structured defect resolution (1)
+    debug.md
   docs/                                 Developer-facing documentation generation (1)
     gitbook.md
   setup/                                Setup and tooling playbooks (4)
