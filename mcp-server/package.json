@@ -1,0 +1,50 @@
+{
+  "name": "agentic-context-mcp",
+  "version": "0.1.1-beta.1",
+  "description": "MCP server serving agentic-context standards, playbooks, and conventions on demand, fetched over HTTPS with in-memory caching",
+  "type": "module",
+  "bin": {
+    "agentic-context-mcp": "build/cli.js"
+  },
+  "files": [
+    "build"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "start": "node build/cli.js",
+    "dev": "tsx src/cli.ts",
+    "pretest": "npm run build",
+    "test": "tsx --test test/**/*.test.ts",
+    "test:unit": "tsx --test test/content.test.ts test/content-stale-fallback.test.ts test/init.test.ts"
+  },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "agentic-context",
+    "standards",
+    "playbooks",
+    "coding-standards"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ldastey-dev/agentic-context.git",
+    "directory": "mcp-server"
+  },
+  "homepage": "https://github.com/ldastey-dev/agentic-context/tree/main/mcp-server#readme",
+  "bugs": {
+    "url": "https://github.com/ldastey-dev/agentic-context/issues"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.30.0",
+    "zod": "^3.24.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.7.0"
+  }
+}

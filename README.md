@@ -43,7 +43,25 @@ User says: "refactor the authentication module"
 
 `AGENTS.md` is the **single source of truth** for project conventions. All agent config files redirect to it and to `.context/index.md`.
 
-## Quick Start
+## MCP Server (Alternative to Deploy)
+
+Instead of copying files into every repository with `deploy.sh`, let agents query standards and playbooks on demand via the [`agentic-context-mcp`](https://www.npmjs.com/package/agentic-context-mcp) MCP server. No git clone, no build-time bundling, no local install even — it runs via `npx` and fetches markdown over HTTPS at request time (defaulting to `raw.githubusercontent.com` for this repo), caching it in memory for a few hours.
+
+One command sets everything up — the MCP equivalent of `deploy.sh` — writing an MCP-flavoured `AGENTS.md`, per-agent redirect files, and each agent's MCP server registration:
+
+```bash
+npx agentic-context-mcp init --agents all
+```
+
+Teams that fork this repo and customise standards/playbooks for their own project can point it at their own published copy instead of upstream, as long as they publish the same directory layout (`core/AGENTS.md`, `core/.context/index.md`, `standards/*.md`, `playbooks/**/*.md`) to any static host (Azure Static Web Apps, Blob Storage static website, GitHub Pages, etc.):
+
+```bash
+npx agentic-context-mcp init --agents all --content-base-url https://your-team-host/agentic-context
+```
+
+The server exposes 9 tools (`search`, `get_index`, `get_agents_config`, `list_standards`, `get_standard`, `list_playbooks`, `get_playbook`, `list_conventions`, `get_convention`) that let any MCP-compatible agent load exactly the content it needs. See [`mcp-server/README.md`](mcp-server/README.md) for what `init` writes, manual configuration snippets per agent, and instructions for building the server itself from source.
+
+## Quick Start (Deploy)
 
 ```bash
 ./deploy.sh --agents all /path/to/target-repo
@@ -136,6 +154,15 @@ playbooks/                              Tier 2 — on demand (→ target .contex
     discover-local-otel-stack.md
     use-local-otel-stack.md
     instrument-dotnet-otel.md
+
+mcp-server/                             MCP server (alternative to deploy.sh)
+  src/
+    cli.ts                              Bin entry — dispatches to server or init
+    server.ts                           MCP server — registers all tools
+    init.ts                             `init` command — MCP equivalent of deploy.sh
+    content.ts                          Fetches content over HTTPS with in-memory caching
+  package.json
+  tsconfig.json
 ```
 
 > Scripts in `playbooks/setup/create-local-otel-stack/` are deployed to
