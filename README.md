@@ -229,24 +229,69 @@ conflicts to resolve.
 ## Versioning
 
 This library is versioned with [Semantic Versioning](https://semver.org). The
-current version is in `VERSION` at the repository root, and every release is
-tagged `vX.Y.Z` with notes in `CHANGELOG.md`.
+current version is in `VERSION` at the repository root, every release is tagged
+`vX.Y.Z` with notes in `CHANGELOG.md`, and each deployment records the version
+it is on in `.context/manifest.json`.
 
-Versions are cut automatically by CI, never by hand:
+The version describes **the library as a whole**, not individual files. A single
+number is what makes the staleness check cheap: comparing your manifest against
+one six-byte file is enough to know whether you are behind.
 
-- A release happens only when **deployable content** changes — `core/`,
-  `standards/`, `playbooks/`, and the deploy, update, migrate and shared library
-  scripts. Changes to the README, workflows or tests do not produce a release,
-  because they never reach a consumer.
-- The **size** of the bump comes from the pull request title, with a patch
-  floor: `feat` gives a minor, a `!` marker or `BREAKING CHANGE` gives a major,
-  anything else gives a patch.
-- `VERSION`, `CHANGELOG.md` and `scripts/baselines/` are written by the release
-  workflow. Pull requests that edit them by hand are rejected by the version
-  gate.
+### What each number means
 
-For maintainers, the version a pull request will cut is reported in its checks
-before merge.
+Versions here describe the effect on **your deployment**, not the scale of the
+writing. A rewritten standard is still a patch if your overrides keep working; a
+single renamed file is a major if they do not.
+
+| Bump | Example: `1.4.2` → | What changed | What you must do |
+| ---- | ------------------ | ------------ | ---------------- |
+| **PATCH** | `1.4.3` | Existing content corrected or clarified. No file added, renamed or removed. | Nothing. Apply it whenever. |
+| **MINOR** | `1.5.0` | New standards, playbooks or conventions added, and new routes in `index.md`. Existing paths unchanged. | Nothing. Your overrides still resolve; you simply gain content. |
+| **MAJOR** | `2.0.0` | A deployed path was renamed or removed, the manifest schema changed, the managed block markers changed, or override resolution changed. | Read [MIGRATIONS.md](MIGRATIONS.md) before applying. An override may now point at a file that no longer exists. |
+
+The distinction that matters is **major versus everything else**. Patches and
+minors are safe to apply unattended: the base is replaced, your override layer
+is untouched, and every override still resolves to a real file. A major is the
+only case where an update can leave an override orphaned, which is why it is the
+only case that requires you to read anything.
+
+`update.sh --status` lists any override whose target no longer exists, so you
+can confirm a major landed cleanly.
+
+### Pinning
+
+New deployments are pinned to their major line — `"pin": "1.x"` in the manifest.
+Patches and minors apply automatically; a major is reported but never applied
+until you act. Widen it to `"*"` to accept anything, narrow it to an exact
+version to freeze entirely, or pass `--force` to override the pin once.
+
+This default means a major can never surprise you, which is what allows majors
+to be used honestly rather than avoided.
+
+### How a version is decided
+
+Versions are cut automatically by CI, never by hand.
+
+**Whether** a release happens depends only on what changed. Deployable content —
+`core/`, `standards/`, `playbooks/`, and the deploy, update, migrate and shared
+library scripts — cuts a release. The README, workflows and tests do not, because
+they never reach a consumer and so cannot make a deployment stale.
+
+**How large** the bump is comes from the pull request title, with a patch floor:
+
+| Pull request title | Bump |
+| ------------------ | ---- |
+| `feat!: ...`, or any title containing `BREAKING CHANGE` | major |
+| `feat: ...` | minor |
+| `fix: ...`, `docs: ...`, or anything else | patch |
+
+The title sets the size of the bump, never whether one happens: a deployable
+change is released regardless of how it was labelled, so mislabelling can
+understate a release but can never lose it.
+
+`VERSION`, `CHANGELOG.md` and `scripts/baselines/` are written by the release
+workflow. Pull requests that edit them by hand are rejected by the version gate,
+which also reports the exact version a merge will cut before it is merged.
 
 ## Staying Current
 

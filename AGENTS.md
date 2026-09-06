@@ -164,11 +164,15 @@ A release is cut only when **deployable content** changes. Deployable means cont
 
 This list lives in exactly one place — `is_deployable` in `scripts/ci/next-version.sh` — and both the gate and the release job call that script, so the version reported on a pull request is always the version its merge cuts. If you add a new file that ships to consumers, add it there or it will never trigger a release and every deployment will silently miss it.
 
-The pull request title sets the **size** of the bump, never whether one happens: `feat` gives a minor, `!` or `BREAKING CHANGE` gives a major, anything else falls to the patch floor. An unrecognised type must never block a release — a deployable change is a release regardless of how its author labelled it.
+The pull request title sets the **size** of the bump, never whether one happens. The derivation and what each number means to a consumer are in the [Versioning section of the README](README.md#versioning) — do not restate them here. The maintainer-facing rule is the one the table cannot express: an unrecognised type must never block a release. A deployable change is a release regardless of how its author labelled it, so mislabelling may understate a version but must never lose one.
+
+Choose the bump by its effect on a consumer's deployment, not by how much prose changed. Renaming or removing a deployed path is a major even if it is a one-line change, because an override pointing at the old path is orphaned by it. Rewriting a standard in full is a patch if every path survives.
+
+The first release is a special case: with no tag to bump from, the version already in `VERSION` is published as-is rather than bumped past. `next-version.sh` handles this when `--latest-tag` is empty, and both the gate and the release job pass it explicitly so they cannot disagree.
 
 Ordering inside the release job is load-bearing. The commit must be pushed **before** the tag is created, because tagging first produces a tag whose tree still holds the previous `VERSION` — a consumer resolving that tag would download content that contradicts the version it was told to expect. The job also runs under `concurrency: cancel-in-progress: false` so releases queue rather than cancel, and guards against re-triggering itself with both an actor check and `[skip ci]`.
 
-Any change that requires a consumer to act needs a section in `MIGRATIONS.md` and a matching baseline, or adopters on the previous version cannot upgrade.
+Any change that requires a consumer to act needs a section in `MIGRATIONS.md` and a matching baseline, or adopters on the previous version cannot upgrade. Because consumers are pinned to their major line by default, a major is never applied silently — which is what makes it safe to cut one when a deployment genuinely needs attention, rather than contorting a change to avoid it.
 
 ---
 
