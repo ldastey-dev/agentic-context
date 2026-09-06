@@ -281,16 +281,22 @@ if [ -f "$SRC/core/.context/index.md" ]; then
 fi
 
 # Refresh the update tooling itself, so a fixed updater reaches consumers.
-mkdir -p "$CONTEXT_DIR/bin/lib"
+mkdir -p "$CONTEXT_DIR/bin/lib" || partial_apply "could not create .context/bin/lib."
 for tool in update.sh update.ps1 migrate.sh migrate.ps1; do
-  [ -f "$SRC/scripts/$tool" ] && cp "$SRC/scripts/$tool" "$CONTEXT_DIR/bin/$tool"
+  if [ -f "$SRC/scripts/$tool" ]; then
+    cp "$SRC/scripts/$tool" "$CONTEXT_DIR/bin/$tool" || partial_apply "could not write bin/$tool."
+  fi
 done
-[ -f "$SRC/scripts/lib/common.sh" ] && cp "$SRC/scripts/lib/common.sh" "$CONTEXT_DIR/bin/lib/common.sh"
+if [ -f "$SRC/scripts/lib/common.sh" ]; then
+  cp "$SRC/scripts/lib/common.sh" "$CONTEXT_DIR/bin/lib/common.sh" || partial_apply "could not write bin/lib/common.sh."
+fi
 # Both libraries, not just this platform's. A deployment updated from bash - a
 # Linux CI runner, or one bash user on a mixed team - would otherwise pair the
 # freshly downloaded update.ps1 with a stale common.ps1 forever, so a bug fixed
 # in the PowerShell library could never reach that repo's Windows users.
-[ -f "$SRC/scripts/lib/common.ps1" ] && cp "$SRC/scripts/lib/common.ps1" "$CONTEXT_DIR/bin/lib/common.ps1"
+if [ -f "$SRC/scripts/lib/common.ps1" ]; then
+  cp "$SRC/scripts/lib/common.ps1" "$CONTEXT_DIR/bin/lib/common.ps1" || partial_apply "could not write bin/lib/common.ps1."
+fi
 chmod +x "$CONTEXT_DIR/bin"/*.sh 2>/dev/null || true
 
 # Refresh only the managed block in AGENTS.md.

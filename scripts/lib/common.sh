@@ -177,26 +177,43 @@ ac_manifest_get() {
   sed -n 's/.*"'"$key"'"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$file" | head -1
 }
 
-# Hash every deployable file in a deployed .context tree, printing
+# Hash every base file in a deployed .context tree, printing
 # "<relative-path>  <sha256>" lines sorted by path.
 #
 # Relative paths are relative to the .context directory. Overrides and the
 # bin/ directory are excluded: overrides belong to the consumer, and bin/ is
 # refreshed like any other base file but is not part of the content baseline.
+# manifest.json, VERSION and .last-update-check are generated state, not
+# content - manifest.json in particular cannot hash itself.
+#
+# This deliberately covers more than markdown. deploy ships non-markdown
+# companions under playbooks/ (compose files, env files, shell scripts), and
+# update replaces each area wholesale. Hashing only *.md meant a consumer edit
+# to one of those was destroyed with no divergence report, which is precisely
+# the outcome the override layer exists to prevent.
 ac_hash_context_tree() {
   local ctx="$1" f rel
   [ -d "$ctx" ] || return 1
-  find "$ctx" -type f -name '*.md' \
+  find "$ctx" -type f \
     ! -path "$ctx/overrides/*" \
     ! -path "$ctx/bin/*" \
+    ! -name 'manifest.json' \
+    ! -name 'VERSION' \
+    ! -name '.last-update-check' \
     2>/dev/null | LC_ALL=C sort | while IFS= read -r f; do
       rel="${f#"$ctx"/}"
       printf '%s  %s\n' "$rel" "$(ac_sha256 "$f")"
     done
 }
 
-# Hash the deployable source files in this repository, printing the same
+# Hash the markdown base files in this repository, printing the same
 # "<target-relative-path>  <sha256>" shape so the two can be diffed directly.
+#
+# Markdown only, deliberately: this backs the published baselines, which
+# migrate uses to tell a pristine context file from an edited one. Non-markdown
+# companions are classified by migrate on whether they exist in the source
+# tree, not by hash, and the frozen unversioned baseline is markdown-only, so
+# widening this would make the baselines disagree with each other.
 ac_hash_source_tree() {
   local root="$1" f rel
   [ -d "$root" ] || return 1

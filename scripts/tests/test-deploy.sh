@@ -725,6 +725,58 @@ fi
 
 rm -rf "$TC14_DIR"
 
+# ═══════════════════════════════════════════════════════════════════════
+# TC15: non-markdown base files are tracked and their edits reported
+#
+# The manifest hashed only *.md, but deploy ships non-markdown companions
+# under playbooks/ and update replaces each area wholesale. An edit to one
+# was therefore destroyed with no divergence report - the exact outcome the
+# override layer exists to prevent.
+# ═══════════════════════════════════════════════════════════════════════
+echo ""
+echo "=== TC15: non-markdown base file tracking ==="
+
+TC15_DIR=$(mktemp -d)
+"$SCRIPTS_DIR/deploy.sh" --agents claude --overwrite "$TC15_DIR" >/dev/null 2>&1
+
+TC15_NONMD="playbooks/setup/create-local-otel-stack/docker-compose.yaml"
+if [ -f "$TC15_DIR/.context/$TC15_NONMD" ]; then
+  pass "deploy: non-markdown companion shipped"
+else
+  fail "deploy: non-markdown companion missing - fixture is stale"
+fi
+
+if grep -q "$TC15_NONMD" "$TC15_DIR/.context/manifest.json"; then
+  pass "manifest: non-markdown base file is tracked"
+else
+  fail "manifest: non-markdown base file is not tracked"
+fi
+
+# Generated state must never be hashed; manifest.json cannot hash itself.
+if ! grep -q '"manifest.json"' "$TC15_DIR/.context/manifest.json" \
+  && ! grep -q '"VERSION"' "$TC15_DIR/.context/manifest.json"; then
+  pass "manifest: generated state excluded from hashes"
+else
+  fail "manifest: generated state was hashed"
+fi
+
+if ! grep -q '"overrides/' "$TC15_DIR/.context/manifest.json" \
+  && ! grep -q '"bin/' "$TC15_DIR/.context/manifest.json"; then
+  pass "manifest: overrides and bin excluded from hashes"
+else
+  fail "manifest: overrides or bin were hashed"
+fi
+
+printf 'tampered\n' >> "$TC15_DIR/.context/$TC15_NONMD"
+TC15_OUT="$(cd "$TC15_DIR" && bash .context/bin/update.sh --status 2>&1)" || true
+if printf '%s' "$TC15_OUT" | grep -q "$TC15_NONMD"; then
+  pass "update: an edited non-markdown base file is reported as diverged"
+else
+  fail "update: an edited non-markdown base file went unreported"
+fi
+
+rm -rf "$TC15_DIR"
+
 echo ""
 echo "=== Results ==="
 echo "  Passed: $PASSED"

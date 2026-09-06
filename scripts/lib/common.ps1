@@ -211,11 +211,19 @@ function Get-AcContextHashes {
     $full = (Resolve-Path -LiteralPath $ContextDir).Path
     $sep = [System.IO.Path]::DirectorySeparatorChar
 
-    $files = Get-ChildItem -LiteralPath $full -Recurse -File -Filter '*.md' -ErrorAction SilentlyContinue |
+    # -Force so dotfiles are included, and no *.md filter: deploy ships
+    # non-markdown companions under playbooks/, and update replaces each area
+    # wholesale, so hashing only markdown meant a consumer edit to one of those
+    # was destroyed with no divergence report. manifest.json, VERSION and
+    # .last-update-check are generated state, not content.
+    $generated = @('manifest.json', 'VERSION', '.last-update-check')
+    $files = Get-ChildItem -LiteralPath $full -Recurse -File -Force -ErrorAction SilentlyContinue |
         Where-Object {
             $rel = $_.FullName.Substring($full.Length).TrimStart($sep)
             $relNorm = $rel.Replace('\', '/')
-            (-not $relNorm.StartsWith('overrides/')) -and (-not $relNorm.StartsWith('bin/'))
+            (-not $relNorm.StartsWith('overrides/')) -and
+            (-not $relNorm.StartsWith('bin/')) -and
+            ($generated -notcontains $relNorm)
         } |
         Sort-Object { $_.FullName.Substring($full.Length).TrimStart($sep).Replace('\', '/') }
 
