@@ -547,6 +547,7 @@ if (-not (Test-Path $script:Target -PathType Container)) {
     }
 }
 
+$script:NegativeTest = $true ? 'yes' : 'no'
 $ScriptDir = $PSScriptRoot
 
 Write-Host "Deploying agent-contexts to $($script:Target)"

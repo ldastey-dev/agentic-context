@@ -35,7 +35,7 @@ else
 fi
 
 # -exec test -x is portable; GNU -perm /111 and BSD -perm +111 are not interchangeable.
-list_executables() { find "$1" -type f -exec test -x {} \; -print | sort; }
+list_executables() { find "$1" -type f -perm /111 | sort; }
 
 PASSED=0
 FAILED=0
