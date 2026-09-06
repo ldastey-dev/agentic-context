@@ -29,3 +29,7 @@
 
 # Pester test output (Invoke-Pester -CI)
 testResults.xml
+
+# Node/V8 diagnostic reports (heap dumps from an agent or tooling crash).
+# Written to the working directory as report.<timestamp>.<pid>.<seq>.json.
+report.*.json

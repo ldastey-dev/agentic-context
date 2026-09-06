@@ -11,7 +11,8 @@
 $ErrorActionPreference = "Stop"
 
 $ScriptDir = Split-Path -Parent $PSCommandPath
-$RepoDir = Split-Path -Parent $ScriptDir
+$RepoDir = Split-Path -Parent (Split-Path -Parent $ScriptDir)
+$ScriptsDir = Split-Path -Parent $ScriptDir
 
 $script:Passed = 0
 $script:Failed = 0
@@ -109,7 +110,7 @@ Write-Host ""
 Write-Host "=== TC1: Fresh deploy — all agents ==="
 $tc1Dir = Join-Path ([System.IO.Path]::GetTempPath()) "tc1-$([guid]::NewGuid().ToString('N').Substring(0,8))"
 New-Item -ItemType Directory -Path $tc1Dir -Force | Out-Null
-& "$RepoDir/deploy.ps1" -Agents all -Overwrite -Target $tc1Dir *>$null
+& "$ScriptsDir/deploy.ps1" -Agents all -Overwrite -Target $tc1Dir *>$null
 
 Write-Host "  --- Playbook files ---"
 Assert-FileExists "create-local-otel-stack.md" "$tc1Dir/.context/playbooks/setup/create-local-otel-stack.md"
@@ -179,7 +180,7 @@ Write-Host ""
 Write-Host "=== TC2: Agent-scoped deploy — Claude only ==="
 $tc2Dir = Join-Path ([System.IO.Path]::GetTempPath()) "tc2-$([guid]::NewGuid().ToString('N').Substring(0,8))"
 New-Item -ItemType Directory -Path $tc2Dir -Force | Out-Null
-& "$RepoDir/deploy.ps1" -Agents claude -Overwrite -Target $tc2Dir *>$null
+& "$ScriptsDir/deploy.ps1" -Agents claude -Overwrite -Target $tc2Dir *>$null
 
 Assert-FileExists "claude wrapper present" "$tc2Dir/.claude/skills/setup-create-local-otel-stack/SKILL.md"
 Assert-DirNotExists "copilot dir absent" "$tc2Dir/.github/skills/setup-create-local-otel-stack"
@@ -193,7 +194,7 @@ Write-Host ""
 Write-Host "=== TC3: Agent-scoped deploy — Copilot only ==="
 $tc3Dir = Join-Path ([System.IO.Path]::GetTempPath()) "tc3-$([guid]::NewGuid().ToString('N').Substring(0,8))"
 New-Item -ItemType Directory -Path $tc3Dir -Force | Out-Null
-& "$RepoDir/deploy.ps1" -Agents copilot -Overwrite -Target $tc3Dir *>$null
+& "$ScriptsDir/deploy.ps1" -Agents copilot -Overwrite -Target $tc3Dir *>$null
 
 Assert-FileExists "copilot wrapper present" "$tc3Dir/.github/skills/setup-create-local-otel-stack/SKILL.md"
 Assert-DirNotExists "claude dir absent" "$tc3Dir/.claude/skills/setup-create-local-otel-stack"
@@ -207,7 +208,7 @@ Write-Host ""
 Write-Host "=== TC4: No regressions — existing thin wrappers ==="
 $tc4Dir = Join-Path ([System.IO.Path]::GetTempPath()) "tc4-$([guid]::NewGuid().ToString('N').Substring(0,8))"
 New-Item -ItemType Directory -Path $tc4Dir -Force | Out-Null
-& "$RepoDir/deploy.ps1" -Agents claude -Overwrite -Target $tc4Dir *>$null
+& "$ScriptsDir/deploy.ps1" -Agents claude -Overwrite -Target $tc4Dir *>$null
 
 Assert-FileExists "assess-observability" "$tc4Dir/.claude/skills/assess-observability/SKILL.md"
 
@@ -235,7 +236,7 @@ $originalCurrentDirectory = [Environment]::CurrentDirectory
 try {
     Set-Location $tc5Launch
     [Environment]::CurrentDirectory = $tc5Corrupt
-    & "$RepoDir/deploy.ps1" -Agents claude -Overwrite -Target "../reltarget" *>$null
+    & "$ScriptsDir/deploy.ps1" -Agents claude -Overwrite -Target "../reltarget" *>$null
 } finally {
     Set-Location $originalCwd
     [Environment]::CurrentDirectory = $originalCurrentDirectory
@@ -245,6 +246,68 @@ Assert-FileExists "AGENTS.md deployed relative to launch dir" "$tc5CorrectTarget
 Assert-FileNotExists "AGENTS.md NOT deployed relative to corrupted CurrentDirectory" "$tc5CorruptParent/reltarget/AGENTS.md"
 
 Remove-Item -Recurse -Force $tc5Base
+
+# ═══════════════════════════════════════════════════════════════════════
+# TC6: manifest and override layer are deployed
+# ═══════════════════════════════════════════════════════════════════════
+Write-Host ""
+Write-Host "=== TC6: manifest and override layer ==="
+$tc6Dir = Join-Path ([System.IO.Path]::GetTempPath()) ("ac-tc6-" + [System.Guid]::NewGuid().ToString("N"))
+New-Item -ItemType Directory -Path $tc6Dir -Force | Out-Null
+& "$ScriptsDir/deploy.ps1" -Agents all -Overwrite -Target $tc6Dir *>$null
+
+Assert-FileExists "manifest.json" "$tc6Dir/.context/manifest.json"
+
+$tc6Version = (Get-Content (Join-Path $RepoDir 'VERSION') -Raw).Trim()
+Assert-Contains "manifest records the current version" "$tc6Dir/.context/manifest.json" "`"version`": `"$tc6Version`""
+
+Assert-FileExists "override layer README" "$tc6Dir/.context/overrides/README.md"
+
+foreach ($tc6Tool in @('update.sh', 'update.ps1', 'lib/common.sh', 'lib/common.ps1')) {
+    Assert-FileExists "bin/$tc6Tool" "$tc6Dir/.context/bin/$tc6Tool"
+}
+
+# The managed block is what lets an update rewrite framework content without
+# touching the consumer's own AGENTS.md prose.
+Assert-Contains "AGENTS.md managed block start" "$tc6Dir/AGENTS.md" "agentic-context:begin"
+Assert-Contains "AGENTS.md managed block end" "$tc6Dir/AGENTS.md" "agentic-context:end"
+
+# -Status must work without network access and must not fail on a clean tree.
+$tc6Status = & pwsh -NoProfile -File "$tc6Dir/.context/bin/update.ps1" -Status 2>&1 | Out-String
+if ($tc6Status -match [regex]::Escape("agentic-context $tc6Version")) {
+    Pass "update.ps1 -Status reports the deployed version"
+} else {
+    Fail "update.ps1 -Status did not report the deployed version"
+}
+
+Remove-Item -Recurse -Force $tc6Dir
+
+# ═══════════════════════════════════════════════════════════════════════
+# TC7: consumer edits outside the managed block survive a redeploy
+# ═══════════════════════════════════════════════════════════════════════
+Write-Host ""
+Write-Host "=== TC7: consumer AGENTS.md content survives redeploy ==="
+$tc7Dir = Join-Path ([System.IO.Path]::GetTempPath()) ("ac-tc7-" + [System.Guid]::NewGuid().ToString("N"))
+New-Item -ItemType Directory -Path $tc7Dir -Force | Out-Null
+& "$ScriptsDir/deploy.ps1" -Agents all -Overwrite -Target $tc7Dir *>$null
+
+$tc7Agents = Join-Path $tc7Dir 'AGENTS.md'
+$tc7Body = Get-Content $tc7Agents -Raw
+Set-Content -Path $tc7Agents -Value ("Sentinel-above-block`n`n" + $tc7Body + "`n## Our own section`nSentinel-below-block`n") -NoNewline
+
+& "$ScriptsDir/deploy.ps1" -Agents all -Overwrite -Target $tc7Dir *>$null
+
+Assert-Contains "content above the managed block survived redeploy" $tc7Agents "Sentinel-above-block"
+Assert-Contains "content below the managed block survived redeploy" $tc7Agents "Sentinel-below-block"
+
+# An override the consumer wrote must never be overwritten by a redeploy.
+$tc7Override = Join-Path $tc7Dir '.context/overrides/standards'
+New-Item -ItemType Directory -Path $tc7Override -Force | Out-Null
+Set-Content -Path (Join-Path $tc7Override 'testing.md') -Value "Sentinel-override"
+& "$ScriptsDir/deploy.ps1" -Agents all -Overwrite -Target $tc7Dir *>$null
+Assert-Contains "consumer override survived redeploy" (Join-Path $tc7Override 'testing.md') "Sentinel-override"
+
+Remove-Item -Recurse -Force $tc7Dir
 
 # ═══════════════════════════════════════════════════════════════════════
 # Summary

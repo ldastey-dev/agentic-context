@@ -165,6 +165,174 @@ copy_dir_contents() {
   done < <(find "$src" -type f -print0 | sort -z)
 }
 
+# Copy core/.context but skip the override subtree, which is seeded separately
+# and must never be overwritten.
+copy_dir_contents_excluding_overrides() {
+  local src="$1"
+  local dst="$2"
+  local rel_path
+
+  while IFS= read -r -d '' file; do
+    rel_path="${file#"$src"/}"
+    case "$rel_path" in
+      overrides/*) continue ;;
+    esac
+    copy_file "$file" "$dst/$rel_path"
+  done < <(find "$src" -type f -print0 | sort -z)
+}
+
+# Seed a file only when it is absent, ignoring --overwrite entirely.
+#
+# The override tree is consumer-owned: the whole architecture depends on the
+# framework never writing there, because that is what makes the base
+# disposable. copy_file honours --overwrite, so using it for the override
+# scaffolding would let a redeploy destroy a consumer's own README - the very
+# file where they document why their overrides exist.
+seed_file_if_absent() {
+  local src="$1"
+  local dst="$2"
+
+  if [[ -e "$dst" ]]; then
+    return 0
+  fi
+
+  mkdir -p "$(dirname "$dst")"
+  cp "$src" "$dst"
+}
+
+seed_dir_if_absent() {
+  local src="$1"
+  local dst="$2"
+  local rel_path
+
+  while IFS= read -r -d '' file; do
+    rel_path="${file#"$src"/}"
+    seed_file_if_absent "$file" "$dst/$rel_path"
+  done < <(find "$src" -type f -print0 | sort -z)
+}
+
+# --- managed block ---------------------------------------------------------
+#
+# The consumer owns AGENTS.md: it carries their [CONFIGURE] sections. The
+# framework owns only the region between the begin/end markers. Rewriting just
+# that region is the only safe way to refresh a file we do not own.
+
+# The markers and the well-formed-block test live in scripts/lib/common.sh so
+# deploy and update cannot disagree about what counts as a managed block.
+
+# Print the managed block (markers included) from the source template.
+extract_managed_block() {
+  local file="$1"
+  awk -v b="$AC_BEGIN_MARKER" -v e="$AC_END_MARKER" '
+    index($0, b) == 1 { inblock = 1 }
+    inblock { print }
+    index($0, e) == 1 { inblock = 0 }
+  ' "$file"
+}
+
+# Replace the managed block in $dst with the one from $src, preserving
+# everything outside the markers byte for byte.
+replace_managed_block() {
+  local src="$1" dst="$2" version="$3"
+  local block_file tmp_file
+
+  block_file="$(mktemp)"
+  tmp_file="$(mktemp)"
+
+  extract_managed_block "$src" \
+    | sed "1s|^$AC_BEGIN_MARKER.*|$AC_BEGIN_MARKER $version -->|" > "$block_file"
+
+  awk -v b="$AC_BEGIN_MARKER" -v e="$AC_END_MARKER" -v blockfile="$block_file" '
+    index($0, b) == 1 {
+      inblock = 1
+      while ((getline line < blockfile) > 0) { print line }
+      close(blockfile)
+      next
+    }
+    index($0, e) == 1 && inblock { inblock = 0; next }
+    !inblock { print }
+  ' "$dst" > "$tmp_file"
+
+  cat "$tmp_file" > "$dst"
+  rm -f "$block_file" "$tmp_file"
+}
+
+# Deploy AGENTS.md safely.
+#   - absent            -> copy the template whole
+#   - has managed block -> rewrite only that block, keep the rest untouched
+#   - no managed block  -> defer to the normal overwrite prompt
+deploy_agents_md() {
+  local src="$1" dst="$2" version="$3"
+
+  if [ ! -f "$dst" ]; then
+    mkdir -p "$(dirname "$dst")"
+    sed "s|^$AC_BEGIN_MARKER.*|$AC_BEGIN_MARKER $version -->|" "$src" > "$dst"
+    return 0
+  fi
+
+  if ac_has_managed_block "$dst"; then
+    replace_managed_block "$src" "$dst" "$version"
+    echo "    AGENTS.md: refreshed managed block (your content preserved)"
+    return 0
+  fi
+
+  copy_file "$src" "$dst"
+}
+
+# --- manifest --------------------------------------------------------------
+
+# Write .context/manifest.json describing what was deployed, so update and
+# migrate can tell pristine base files from consumer-edited ones.
+write_manifest() {
+  local target="$1" version="$2" agents="$3"
+  local manifest="$target/.context/manifest.json"
+  local ctx="$target/.context"
+  local now first=1 pin freq
+
+  now="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+
+  # pin and checkFrequency are consumer configuration, not derived state.
+  # Redeploying over an existing deployment must not silently undo a
+  # deliberate choice - "*" to accept majors, an exact version to freeze, or a
+  # check frequency other than weekly. update.sh and update.ps1 already
+  # preserve both; deploy has to agree or a redeploy quietly resets them.
+  if [ -f "$manifest" ]; then
+    pin="$(ac_manifest_get "$manifest" pin)"
+    freq="$(ac_manifest_get "$manifest" checkFrequency)"
+  fi
+  [ -n "${pin:-}" ] || pin="$(ac_semver_major "$version").x"
+  [ -n "${freq:-}" ] || freq="weekly"
+
+  mkdir -p "$ctx"
+  {
+    printf '{\n'
+    printf '  "schema": 1,\n'
+    printf '  "version": "%s",\n' "$version"
+    printf '  "source": "%s",\n' "$AC_SOURCE_REPO"
+    printf '  "pin": "%s",\n' "$pin"
+    printf '  "checkFrequency": "%s",\n' "$freq"
+    printf '  "deployedAt": "%s",\n' "$now"
+    printf '  "agents": ['
+    for agent in $agents; do
+      if [ $first -eq 1 ]; then first=0; else printf ','; fi
+      printf '"%s"' "$agent"
+    done
+    printf '],\n'
+    printf '  "files": {\n'
+
+    first=1
+    ac_hash_context_tree "$ctx" | while IFS= read -r line; do
+      rel="${line%%  *}"
+      hash="${line##*  }"
+      if [ $first -eq 1 ]; then first=0; else printf ',\n'; fi
+      printf '    "%s": "%s"' "$rel" "$hash"
+    done
+
+    printf '\n  }\n'
+    printf '}\n'
+  } > "$manifest"
+}
+
 interactive_select_agents() {
   local options=(all "${VALID_AGENTS[@]}" "clear and exit")
   local options_count=${#options[@]}
@@ -533,45 +701,57 @@ if [[ ! -d "$TARGET" ]]; then
 fi
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# Content lives one level up: this script sits in scripts/, sources are at the repo root.
+SOURCE_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+
+# shellcheck source=scripts/lib/common.sh
+. "$SCRIPT_DIR/lib/common.sh"
+
+DEPLOY_VERSION="$(ac_semver_normalise "$(cat "$SOURCE_ROOT/VERSION" 2>/dev/null || echo '0.0.0')")"
+ac_semver_is_valid "$DEPLOY_VERSION" || DEPLOY_VERSION="0.0.0"
 
 echo "Deploying agent-contexts to $TARGET"
+echo "  Version: $DEPLOY_VERSION"
 echo "  Selected agents: $(join_by ', ' "${ENABLED_AGENTS[@]}")"
 
 echo "  Copying shared context files..."
-copy_file "$SCRIPT_DIR/core/AGENTS.md" "$TARGET/AGENTS.md"
-copy_dir_contents "$SCRIPT_DIR/core/.context" "$TARGET/.context"
+deploy_agents_md "$SOURCE_ROOT/core/AGENTS.md" "$TARGET/AGENTS.md" "$DEPLOY_VERSION"
+# The override subtree is deliberately excluded here and seeded later with
+# seed_dir_if_absent, so that --overwrite can never rewrite consumer-owned
+# files under .context/overrides/.
+copy_dir_contents_excluding_overrides "$SOURCE_ROOT/core/.context" "$TARGET/.context"
 
 if agent_enabled claude; then
   echo "  Copying Claude Code files..."
-  copy_file "$SCRIPT_DIR/core/CLAUDE.md" "$TARGET/CLAUDE.md"
-  copy_file "$SCRIPT_DIR/core/.claude/settings.json" "$TARGET/.claude/settings.json"
+  copy_file "$SOURCE_ROOT/core/CLAUDE.md" "$TARGET/CLAUDE.md"
+  copy_file "$SOURCE_ROOT/core/.claude/settings.json" "$TARGET/.claude/settings.json"
 fi
 
 if agent_enabled copilot; then
   echo "  Copying GitHub Copilot files..."
-  copy_file "$SCRIPT_DIR/core/.github/copilot-instructions.md" "$TARGET/.github/copilot-instructions.md"
+  copy_file "$SOURCE_ROOT/core/.github/copilot-instructions.md" "$TARGET/.github/copilot-instructions.md"
 fi
 
 if agent_enabled cursor; then
   echo "  Copying Cursor files..."
-  copy_file "$SCRIPT_DIR/core/.cursor/rules/standards.mdc" "$TARGET/.cursor/rules/standards.mdc"
+  copy_file "$SOURCE_ROOT/core/.cursor/rules/standards.mdc" "$TARGET/.cursor/rules/standards.mdc"
 fi
 
 if agent_enabled devin; then
   echo "  Copying Devin files..."
-  copy_file "$SCRIPT_DIR/core/.devin/devin.json" "$TARGET/.devin/devin.json"
+  copy_file "$SOURCE_ROOT/core/.devin/devin.json" "$TARGET/.devin/devin.json"
 fi
 
 if agent_enabled windsurf; then
   echo "  Copying Windsurf files..."
-  copy_file "$SCRIPT_DIR/core/.windsurfrules" "$TARGET/.windsurfrules"
+  copy_file "$SOURCE_ROOT/core/.windsurfrules" "$TARGET/.windsurfrules"
 fi
 
 echo "  Copying standards/ → $TARGET/.context/standards/"
-copy_dir_contents "$SCRIPT_DIR/standards" "$TARGET/.context/standards"
+copy_dir_contents "$SOURCE_ROOT/standards" "$TARGET/.context/standards"
 
 echo "  Copying playbooks/ → $TARGET/.context/playbooks/"
-copy_dir_contents "$SCRIPT_DIR/playbooks" "$TARGET/.context/playbooks"
+copy_dir_contents "$SOURCE_ROOT/playbooks" "$TARGET/.context/playbooks"
 
 if agent_enabled claude || agent_enabled copilot; then
   echo "  Generating skill wrappers from playbooks..."
@@ -584,29 +764,29 @@ if agent_enabled claude || agent_enabled copilot; then
     mkdir -p "$TARGET/.github/skills"
   fi
 
-  for playbook in "$SCRIPT_DIR"/playbooks/assess/*.md; do
+  for playbook in "$SOURCE_ROOT"/playbooks/assess/*.md; do
     filename=$(basename "$playbook")
     generate_skills_for_selected_agents "$playbook" "assess/$filename"
   done
 
-  for playbook in "$SCRIPT_DIR"/playbooks/review/*.md; do
+  for playbook in "$SOURCE_ROOT"/playbooks/review/*.md; do
     filename=$(basename "$playbook")
     # Review playbooks get read-only tools for Claude Code
     generate_skills_for_selected_agents "$playbook" "review/$filename" "Read, Grep, Glob, Bash(git *)"
   done
 
-  for playbook in "$SCRIPT_DIR"/playbooks/plan/*.md; do
+  for playbook in "$SOURCE_ROOT"/playbooks/plan/*.md; do
     filename=$(basename "$playbook")
     generate_skills_for_selected_agents "$playbook" "plan/$filename"
   done
 
-  for playbook in "$SCRIPT_DIR"/playbooks/refactor/*.md; do
+  for playbook in "$SOURCE_ROOT"/playbooks/refactor/*.md; do
     filename=$(basename "$playbook")
     generate_skills_for_selected_agents "$playbook" "refactor/$filename"
   done
 
-  if [[ -d "$SCRIPT_DIR/playbooks/debug" ]]; then
-    for playbook in "$SCRIPT_DIR"/playbooks/debug/*.md; do
+  if [[ -d "$SOURCE_ROOT/playbooks/debug" ]]; then
+    for playbook in "$SOURCE_ROOT"/playbooks/debug/*.md; do
       [[ -f "$playbook" ]] || continue
       filename=$(basename "$playbook")
       generate_skills_for_selected_agents "$playbook" "debug/$filename" \
@@ -614,16 +794,16 @@ if agent_enabled claude || agent_enabled copilot; then
     done
   fi
 
-  if [[ -d "$SCRIPT_DIR/playbooks/docs" ]]; then
-    for playbook in "$SCRIPT_DIR"/playbooks/docs/*.md; do
+  if [[ -d "$SOURCE_ROOT/playbooks/docs" ]]; then
+    for playbook in "$SOURCE_ROOT"/playbooks/docs/*.md; do
       [[ -f "$playbook" ]] || continue
       filename=$(basename "$playbook")
       generate_skills_for_selected_agents "$playbook" "docs/$filename"
     done
   fi
 
-  if [[ -d "$SCRIPT_DIR/playbooks/setup" ]]; then
-    for playbook in "$SCRIPT_DIR"/playbooks/setup/*.md; do
+  if [[ -d "$SOURCE_ROOT/playbooks/setup" ]]; then
+    for playbook in "$SOURCE_ROOT"/playbooks/setup/*.md; do
       [[ -f "$playbook" ]] || continue
       filename=$(basename "$playbook")
       generate_skills_for_selected_agents "$playbook" "setup/$filename" \
@@ -633,6 +813,33 @@ if agent_enabled claude || agent_enabled copilot; then
 else
   echo "  Skipping skill wrapper generation (no selected agent uses skills)."
 fi
+
+# Consumer-owned override tree. Created empty; never touched again by update.
+echo "  Creating override layer → $TARGET/.context/overrides/"
+mkdir -p "$TARGET/.context/overrides"
+seed_dir_if_absent "$SOURCE_ROOT/core/.context/overrides" "$TARGET/.context/overrides"
+
+# Update tooling, shipped into the target so it can maintain itself.
+echo "  Installing update tooling → $TARGET/.context/bin/"
+mkdir -p "$TARGET/.context/bin"
+# Routed through copy_file so --no-overwrite means what it says. Every other
+# base file honours the guard, and silently rewriting the tooling regardless
+# would make the flag misleading. Refreshing a stale updater unconditionally
+# is update.sh's job, where replacing the base is the declared intent.
+for tool in update.sh update.ps1 migrate.sh migrate.ps1; do
+  if [[ -f "$SOURCE_ROOT/scripts/$tool" ]]; then
+    copy_file "$SOURCE_ROOT/scripts/$tool" "$TARGET/.context/bin/$tool"
+  fi
+done
+mkdir -p "$TARGET/.context/bin/lib"
+copy_file "$SOURCE_ROOT/scripts/lib/common.sh" "$TARGET/.context/bin/lib/common.sh"
+[[ -f "$SOURCE_ROOT/scripts/lib/common.ps1" ]] && copy_file "$SOURCE_ROOT/scripts/lib/common.ps1" "$TARGET/.context/bin/lib/common.ps1"
+chmod +x "$TARGET/.context/bin"/*.sh 2>/dev/null || true
+
+printf '%s\n' "$DEPLOY_VERSION" > "$TARGET/.context/VERSION"
+
+echo "  Writing manifest → $TARGET/.context/manifest.json"
+write_manifest "$TARGET" "$DEPLOY_VERSION" "${ENABLED_AGENTS[*]}"
 
 echo ""
 echo "Done. Next steps:"
@@ -651,6 +858,17 @@ fi
 
 if agent_enabled copilot; then
   next_step "Review $TARGET/.github/copilot-instructions.md"
+fi
+
+next_step "Never edit .context/standards|playbooks|conventions directly — use .context/overrides/ (see .context/overrides/README.md)"
+
+# Report staleness on every deploy. Fails open and never blocks.
+if latest="$(ac_fetch_latest_version "$AC_SOURCE_REPO" 2>/dev/null)" && [[ -n "$latest" ]]; then
+  if ac_semver_gt "$latest" "$DEPLOY_VERSION"; then
+    echo ""
+    echo "  Note: you deployed $DEPLOY_VERSION but $latest is available upstream."
+    echo "        Pull the latest agentic-context and re-run this script."
+  fi
 fi
 
 if [[ ${#SKIPPED_FILES[@]} -gt 0 ]]; then

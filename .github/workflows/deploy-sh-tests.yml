@@ -57,6 +57,68 @@ jobs:
           done < <(git ls-files '*.sh')
           exit $status
 
+      - name: Executable bit on entry-point scripts
+        run: |
+          # A lost executable bit surfaces as an opaque exit 126 in the test job,
+          # so check it here where the cause is obvious. Only scripts that are
+          # invoked directly need it; lib/common.sh is sourced, not run.
+          status=0
+          for script in \
+            scripts/deploy.sh \
+            scripts/update.sh \
+            scripts/migrate.sh \
+            scripts/tests/test-deploy.sh \
+            scripts/ci/next-version.sh \
+            scripts/ci/write-baseline.sh \
+            scripts/ci/write-changelog.sh; do
+            mode="$(git ls-files -s "$script" | cut -d' ' -f1)"
+            if [ "$mode" != "100755" ]; then
+              echo "::error file=$script::$script is mode $mode; it must be 100755. Run: git update-index --chmod=+x $script"
+              status=1
+            fi
+          done
+          exit $status
+
+      - name: Deployable paths cover everything that ships
+        run: |
+          # is_deployable in next-version.sh decides whether a change cuts a
+          # release. If a file reaches consumers but is not listed there, the
+          # change silently never releases and the omission is only discovered
+          # when a consumer notices missing content. A rule this load-bearing
+          # must not depend on remembering a checklist item.
+          set -uo pipefail
+          status=0
+          # Everything the deploy scripts copy into a target repository.
+          shipped="core standards playbooks
+          scripts/deploy.sh scripts/deploy.ps1
+          scripts/update.sh scripts/update.ps1
+          scripts/migrate.sh scripts/migrate.ps1
+          scripts/lib/common.sh scripts/lib/common.ps1"
+          for path in $shipped; do
+            if [ -d "$path" ]; then
+              probe="$path/__probe__.md"
+            else
+              probe="$path"
+            fi
+            printf '%s\n' "$probe" > /tmp/probe.txt
+            result="$(scripts/ci/next-version.sh --changed-files /tmp/probe.txt --subject 'fix: probe' --latest-tag v1.0.0)"
+            if [ "$result" = "none" ]; then
+              echo "::error file=scripts/ci/next-version.sh::'$probe' is deployed to consumers but is_deployable does not match it, so changing it would never cut a release."
+              status=1
+            fi
+          done
+          # And the inverse: non-deployable paths must not trigger releases.
+          for path in README.md AGENTS.md .github/workflows/release.yml scripts/ci/next-version.sh scripts/tests/test-deploy.sh; do
+            printf '%s\n' "$path" > /tmp/probe.txt
+            result="$(scripts/ci/next-version.sh --changed-files /tmp/probe.txt --subject 'fix: probe' --latest-tag v1.0.0)"
+            if [ "$result" != "none" ]; then
+              echo "::error file=scripts/ci/next-version.sh::'$path' never reaches a consumer but is_deployable matches it, so documentation and CI changes would cut releases."
+              status=1
+            fi
+          done
+          [ "$status" -eq 0 ] && echo "OK: deployable paths and is_deployable agree."
+          exit $status
+
   test:
     name: ${{ matrix.name }}
     strategy:
@@ -81,19 +143,19 @@ jobs:
           echo "/bin/bash:    $(/bin/bash --version | head -1)"
 
       - name: Run end-to-end deploy tests
-        run: bash tests/test-deploy.sh
+        run: bash scripts/tests/test-deploy.sh
 
       # macOS ships bash 3.2 as /bin/bash and deploy.sh declares #!/bin/bash,
       # so consumers on macOS run it under 3.2. Assert that explicitly instead of
       # relying on whichever bash happens to be first on PATH.
       - name: Run end-to-end deploy tests under /bin/bash
         if: runner.os == 'macOS'
-        run: /bin/bash tests/test-deploy.sh
+        run: /bin/bash scripts/tests/test-deploy.sh
 
       - name: Verify deploy.sh runs from an arbitrary working directory
         run: |
           target="$(mktemp -d)"
           cd "$(mktemp -d)"
-          "$GITHUB_WORKSPACE/deploy.sh" --agents all --overwrite "$target"
+          "$GITHUB_WORKSPACE/scripts/deploy.sh" --agents all --overwrite "$target"
           test -f "$target/AGENTS.md"
           test -f "$target/.context/index.md"

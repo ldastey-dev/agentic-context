@@ -204,9 +204,59 @@ function Copy-DirectoryContents {
     if (-not (Test-Path $Destination)) {
         New-Item -ItemType Directory -Path $Destination -Force | Out-Null
     }
-    $sourceFiles = Get-ChildItem -Path $Source -Recurse -File
+    # -Force is required or dotfiles are skipped: the override scaffolding
+    # ships .gitkeep files, and without this the subdirectories are never
+    # created, diverging from deploy.sh.
+    $sourceFiles = Get-ChildItem -Path $Source -Recurse -File -Force
     foreach ($file in $sourceFiles) {
         $relativePath = $file.FullName.Substring($Source.TrimEnd('/\').Length + 1)
+        $destPath = Join-Path $Destination $relativePath
+        Copy-SingleFile -Source $file.FullName -Destination $destPath
+    }
+}
+
+# Seed files only where absent, ignoring -Overwrite entirely.
+#
+# The override tree is consumer-owned: the whole architecture depends on the
+# framework never writing there, because that is what makes the base
+# disposable. Copy-SingleFile honours -Overwrite, so using it for the override
+# scaffolding would let a redeploy destroy a consumer's own README - the very
+# file where they document why their overrides exist.
+function Copy-AcSeedContents {
+    param([string]$Source, [string]$Destination)
+    if (-not (Test-Path $Destination)) {
+        New-Item -ItemType Directory -Path $Destination -Force | Out-Null
+    }
+    # -Force is required or dotfiles are skipped: the override scaffolding
+    # ships .gitkeep files, and without this the subdirectories are never
+    # created, diverging from deploy.sh.
+    $sourceFiles = Get-ChildItem -Path $Source -Recurse -File -Force
+    foreach ($file in $sourceFiles) {
+        $relativePath = $file.FullName.Substring($Source.TrimEnd('/\').Length + 1)
+        $destPath = Join-Path $Destination $relativePath
+        if (Test-Path -LiteralPath $destPath) { continue }
+        $parent = Split-Path -Parent $destPath
+        if (-not (Test-Path -LiteralPath $parent)) {
+            New-Item -ItemType Directory -Path $parent -Force | Out-Null
+        }
+        Copy-Item -LiteralPath $file.FullName -Destination $destPath -Force
+    }
+}
+
+# Copy core/.context but skip the override subtree, which is seeded separately
+# and must never be overwritten.
+function Copy-AcContextExcludingOverrides {
+    param([string]$Source, [string]$Destination)
+    if (-not (Test-Path $Destination)) {
+        New-Item -ItemType Directory -Path $Destination -Force | Out-Null
+    }
+    # -Force is required or dotfiles are skipped: the override scaffolding
+    # ships .gitkeep files, and without this the subdirectories are never
+    # created, diverging from deploy.sh.
+    $sourceFiles = Get-ChildItem -Path $Source -Recurse -File -Force
+    foreach ($file in $sourceFiles) {
+        $relativePath = $file.FullName.Substring($Source.TrimEnd('/\').Length + 1)
+        if ($relativePath.Replace('\', '/') -like 'overrides/*') { continue }
         $destPath = Join-Path $Destination $relativePath
         Copy-SingleFile -Source $file.FullName -Destination $destPath
     }
@@ -547,46 +597,81 @@ if (-not (Test-Path $script:Target -PathType Container)) {
     }
 }
 
-$ScriptDir = $PSScriptRoot
+# Content lives one level up: this script sits in scripts/, sources are at the repo root.
+$SourceRoot = Split-Path -Parent $PSScriptRoot
+
+. (Join-Path $PSScriptRoot 'lib/common.ps1')
+
+$DeployVersion = '0.0.0'
+$versionFile = Join-Path $SourceRoot 'VERSION'
+if (Test-Path -LiteralPath $versionFile) {
+    $candidate = ConvertTo-AcSemVer ((Get-Content -LiteralPath $versionFile -Raw))
+    if (Test-AcSemVer $candidate) { $DeployVersion = $candidate }
+}
 
 Write-Host "Deploying agent-contexts to $($script:Target)"
+Write-Host "  Version: $DeployVersion"
 Write-Host "  Selected agents: $($script:EnabledAgents -join ', ')"
 
 Write-Host "  Copying shared context files..."
-Copy-SingleFile -Source (Join-Path $ScriptDir 'core/AGENTS.md') -Destination (Join-Path $script:Target 'AGENTS.md')
-Copy-DirectoryContents -Source (Join-Path $ScriptDir 'core/.context') -Destination (Join-Path $script:Target '.context')
+
+# AGENTS.md belongs to the consumer: it carries their [CONFIGURE] sections.
+# Only the managed block is ours, so refresh just that when it is present.
+$agentsSrc = Join-Path $SourceRoot 'core/AGENTS.md'
+$agentsDst = Join-Path $script:Target 'AGENTS.md'
+if (-not (Test-Path -LiteralPath $agentsDst)) {
+    $parent = Split-Path -Parent $agentsDst
+    if (-not (Test-Path -LiteralPath $parent)) {
+        New-Item -ItemType Directory -Path $parent -Force | Out-Null
+    }
+    $seeded = Get-Content -LiteralPath $agentsSrc | ForEach-Object {
+        if ($_.StartsWith('<!-- agentic-context:begin')) {
+            "<!-- agentic-context:begin $DeployVersion -->"
+        } else {
+            $_
+        }
+    }
+    Set-Content -LiteralPath $agentsDst -Value $seeded -Encoding UTF8
+} elseif (Test-AcManagedBlock -Path $agentsDst) {
+    Update-AcManagedBlock -Source $agentsSrc -Destination $agentsDst -Version $DeployVersion
+    Write-Host "    AGENTS.md: refreshed managed block (your content preserved)"
+} else {
+    Copy-SingleFile -Source $agentsSrc -Destination $agentsDst
+}
+
+Copy-AcContextExcludingOverrides -Source (Join-Path $SourceRoot 'core/.context') -Destination (Join-Path $script:Target '.context')
 
 if (Test-AgentEnabled 'claude') {
     Write-Host "  Copying Claude Code files..."
-    Copy-SingleFile -Source (Join-Path $ScriptDir 'core/CLAUDE.md') -Destination (Join-Path $script:Target 'CLAUDE.md')
-    Copy-SingleFile -Source (Join-Path $ScriptDir 'core/.claude/settings.json') -Destination (Join-Path $script:Target '.claude/settings.json')
+    Copy-SingleFile -Source (Join-Path $SourceRoot 'core/CLAUDE.md') -Destination (Join-Path $script:Target 'CLAUDE.md')
+    Copy-SingleFile -Source (Join-Path $SourceRoot 'core/.claude/settings.json') -Destination (Join-Path $script:Target '.claude/settings.json')
 }
 
 if (Test-AgentEnabled 'copilot') {
     Write-Host "  Copying GitHub Copilot files..."
-    Copy-SingleFile -Source (Join-Path $ScriptDir 'core/.github/copilot-instructions.md') -Destination (Join-Path $script:Target '.github/copilot-instructions.md')
+    Copy-SingleFile -Source (Join-Path $SourceRoot 'core/.github/copilot-instructions.md') -Destination (Join-Path $script:Target '.github/copilot-instructions.md')
 }
 
 if (Test-AgentEnabled 'cursor') {
     Write-Host "  Copying Cursor files..."
-    Copy-SingleFile -Source (Join-Path $ScriptDir 'core/.cursor/rules/standards.mdc') -Destination (Join-Path $script:Target '.cursor/rules/standards.mdc')
+    Copy-SingleFile -Source (Join-Path $SourceRoot 'core/.cursor/rules/standards.mdc') -Destination (Join-Path $script:Target '.cursor/rules/standards.mdc')
 }
 
 if (Test-AgentEnabled 'devin') {
     Write-Host "  Copying Devin files..."
-    Copy-SingleFile -Source (Join-Path $ScriptDir 'core/.devin/devin.json') -Destination (Join-Path $script:Target '.devin/devin.json')
+    Copy-SingleFile -Source (Join-Path $SourceRoot 'core/.devin/devin.json') -Destination (Join-Path $script:Target '.devin/devin.json')
 }
 
 if (Test-AgentEnabled 'windsurf') {
     Write-Host "  Copying Windsurf files..."
-    Copy-SingleFile -Source (Join-Path $ScriptDir 'core/.windsurfrules') -Destination (Join-Path $script:Target '.windsurfrules')
+    Copy-SingleFile -Source (Join-Path $SourceRoot 'core/.windsurfrules') -Destination (Join-Path $script:Target '.windsurfrules')
 }
 
 Write-Host "  Copying standards\ -> $($script:Target)\.context\standards\"
-Copy-DirectoryContents -Source (Join-Path $ScriptDir 'standards') -Destination (Join-Path $script:Target '.context/standards')
+Copy-DirectoryContents -Source (Join-Path $SourceRoot 'standards') -Destination (Join-Path $script:Target '.context/standards')
 
 Write-Host "  Copying playbooks\ -> $($script:Target)\.context\playbooks\"
-Copy-DirectoryContents -Source (Join-Path $ScriptDir 'playbooks') -Destination (Join-Path $script:Target '.context/playbooks')
+Copy-DirectoryContents -Source (Join-Path $SourceRoot 'playbooks') -Destination (Join-Path $script:Target '.context/playbooks')
 
 if ((Test-AgentEnabled 'claude') -or (Test-AgentEnabled 'copilot')) {
     Write-Host "  Generating skill wrappers from playbooks..."
@@ -610,7 +695,7 @@ if ((Test-AgentEnabled 'claude') -or (Test-AgentEnabled 'copilot')) {
     )
 
     foreach ($category in $playbookCategories) {
-        $dir = Join-Path $ScriptDir "playbooks/$($category.Dir)"
+        $dir = Join-Path $SourceRoot "playbooks/$($category.Dir)"
         if (Test-Path $dir) {
             $playbooks = Get-ChildItem -Path $dir -Filter '*.md' -File -ErrorAction SilentlyContinue
             foreach ($playbook in $playbooks) {
@@ -629,6 +714,63 @@ if ((Test-AgentEnabled 'claude') -or (Test-AgentEnabled 'copilot')) {
 } else {
     Write-Host "  Skipping skill wrapper generation (no selected agent uses skills)."
 }
+
+# Consumer-owned override tree. Created here; never touched again by update.
+Write-Host "  Creating override layer -> $(Join-Path $script:Target '.context/overrides')"
+$overrideDst = Join-Path $script:Target '.context/overrides'
+if (-not (Test-Path -LiteralPath $overrideDst)) {
+    New-Item -ItemType Directory -Path $overrideDst -Force | Out-Null
+}
+Copy-AcSeedContents -Source (Join-Path $SourceRoot 'core/.context/overrides') -Destination $overrideDst
+
+# Update tooling, shipped into the target so it can maintain itself.
+Write-Host "  Installing update tooling -> $(Join-Path $script:Target '.context/bin')"
+$binDst = Join-Path $script:Target '.context/bin'
+$binLibDst = Join-Path $binDst 'lib'
+foreach ($dir in @($binDst, $binLibDst)) {
+    if (-not (Test-Path -LiteralPath $dir)) {
+        New-Item -ItemType Directory -Path $dir -Force | Out-Null
+    }
+}
+# Routed through Copy-SingleFile so -NoOverwrite means what it says. Every
+# other base file honours the guard, and silently rewriting the tooling
+# regardless would make the flag misleading. Refreshing a stale updater
+# unconditionally is update.ps1's job, where replacing the base is the
+# declared intent.
+foreach ($tool in @('update.sh', 'update.ps1', 'migrate.sh', 'migrate.ps1')) {
+    $toolSrc = Join-Path $SourceRoot "scripts/$tool"
+    if (Test-Path -LiteralPath $toolSrc) {
+        Copy-SingleFile -Source $toolSrc -Destination (Join-Path $binDst $tool)
+    }
+}
+foreach ($libFile in @('common.sh', 'common.ps1')) {
+    $libSrc = Join-Path $SourceRoot "scripts/lib/$libFile"
+    if (Test-Path -LiteralPath $libSrc) {
+        Copy-SingleFile -Source $libSrc -Destination (Join-Path $binLibDst $libFile)
+    }
+}
+
+Set-Content -LiteralPath (Join-Path $script:Target '.context/VERSION') -Value $DeployVersion -Encoding UTF8
+
+Write-Host "  Writing manifest -> $(Join-Path $script:Target '.context/manifest.json')"
+# pin and checkFrequency are consumer configuration, not derived state.
+# Redeploying over an existing deployment must not silently undo a deliberate
+# choice - "*" to accept majors, an exact version to freeze, or a check
+# frequency other than weekly. update.sh and update.ps1 already preserve both;
+# deploy has to agree or a redeploy quietly resets them.
+$manifestPath = Join-Path $script:Target '.context/manifest.json'
+$existingPin = ''
+$existingFreq = 'weekly'
+if (Test-Path -LiteralPath $manifestPath) {
+    try {
+        $existing = Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json
+        if ($existing.pin) { $existingPin = [string]$existing.pin }
+        if ($existing.checkFrequency) { $existingFreq = [string]$existing.checkFrequency }
+    } catch {
+        Write-Host "    manifest.json is unreadable - rewriting with defaults."
+    }
+}
+Write-AcManifest -ContextDir (Join-Path $script:Target '.context') -Version $DeployVersion -Agents $script:EnabledAgents -Pin $existingPin -CheckFrequency $existingFreq
 
 Write-Host ""
 Write-Host "Done. Next steps:"
@@ -649,6 +791,16 @@ if (Test-AgentEnabled 'claude') {
 
 if (Test-AgentEnabled 'copilot') {
     Show-NextStep "Review $($script:Target)\.github\copilot-instructions.md"
+}
+
+Show-NextStep "Never edit .context/standards|playbooks|conventions directly - use .context/overrides/ (see .context/overrides/README.md)"
+
+# Report staleness on every deploy. Fails open and never blocks.
+$latest = Get-AcLatestVersion
+if ($latest -and (Test-AcSemVerGreater $latest $DeployVersion)) {
+    Write-Host ""
+    Write-Host "  Note: you deployed $DeployVersion but $latest is available upstream."
+    Write-Host "        Pull the latest agentic-context and re-run this script."
 }
 
 if ($script:SkippedFiles.Count -gt 0) {

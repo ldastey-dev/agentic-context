@@ -1,0 +1,15 @@
+version: 2
+
+# Third-party actions are pinned to full commit SHAs so a retargeted tag cannot
+# execute in our workflows. Dependabot is what keeps those pins current, so the
+# hardening does not decay into running abandoned versions.
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    commit-message:
+      # Workflow files are not deployable, so this never cuts a release.
+      prefix: ci
+    labels:
+      - dependencies
