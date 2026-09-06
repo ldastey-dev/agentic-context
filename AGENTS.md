@@ -61,6 +61,14 @@ When adding a new standard or playbook, the new entry in `core/.context/index.md
 
 Standards use "must", "never", "always". They are not suggestions. Every standard ends with a `## Non-Negotiables` and a `## Decision Checklist` so a reader can act without rereading the body.
 
+### 6. The base is disposable; only the override layer is owned
+
+Everything the deploy scripts write into a target's `.context/` base — standards, playbooks, conventions, `index.md` — is **replaced wholesale on every update**. This is deliberate. It is what removes merging from the update path entirely: there is no three-way merge, no conflict, and no drift to reconcile.
+
+Consumers customise through `.context/overrides/`, which updates never touch, and through the region of their `AGENTS.md` outside the managed block.
+
+The consequence for maintainers: **nothing generated into the base may carry consumer state.** If you add a file to the base that a consumer would reasonably want to edit, you have created a file that updates will silently destroy. Either it belongs in the override layer, or it must be generated from the manifest.
+
 ---
 
 ## Source → Target Layout
@@ -71,14 +79,18 @@ The directory layout in this repo is **not** the layout in target repos. The dep
 
 | Source here | Target repo path |
 | --- | --- |
-| `core/AGENTS.md` | `<repo>/AGENTS.md` |
+| `core/AGENTS.md` | `<repo>/AGENTS.md` (managed block only after first deploy) |
 | `core/CLAUDE.md` | `<repo>/CLAUDE.md` |
 | `core/.context/index.md` | `<repo>/.context/index.md` |
 | `core/.context/conventions/*` | `<repo>/.context/conventions/*` |
+| `core/.context/overrides/*` | `<repo>/.context/overrides/*` (scaffold only — never overwritten) |
 | `standards/*.md` | `<repo>/.context/standards/*.md` |
 | `playbooks/**/*.md` | `<repo>/.context/playbooks/**/*.md` |
+| `scripts/{update,migrate}.{sh,ps1}`, `scripts/lib/*` | `<repo>/.context/bin/` |
 | `core/.cursor/`, `.devin/`, `.windsurfrules`, `.github/copilot-instructions.md` | mirrored to target (only when the agent is selected) |
 | Skill wrappers generated from `playbooks/**/*.md` frontmatter | `<repo>/.claude/skills/` and `<repo>/.github/skills/` (Claude/Copilot only) |
+
+Generated into the target, with no source file here: `<repo>/.context/manifest.json` and `<repo>/.context/VERSION`.
 
 ---
 
@@ -136,6 +148,30 @@ The directory layout in this repo is **not** the layout in target repos. The dep
 
 ---
 
+### Versioning and releases
+
+**Never edit `VERSION`, `CHANGELOG.md`, or `scripts/baselines/` by hand.** All three are written by `.github/workflows/release.yml` when a change lands on `main`, and `.github/workflows/version-gate.yml` rejects any pull request that touches them. A hand-written baseline is the most damaging of the three: `migrate.sh` uses it to tell a pristine file from a consumer's edit, so a wrong baseline silently corrupts every future migration.
+
+A release is cut only when **deployable content** changes. Deployable means content that reaches a consumer repository:
+
+| Deployable — cuts a release | Not deployable — cuts nothing |
+| --- | --- |
+| `core/**`, `standards/**`, `playbooks/**` | `README.md`, this file, `MIGRATIONS.md` |
+| `scripts/deploy.{sh,ps1}` | `.github/workflows/**` |
+| `scripts/update.{sh,ps1}` | `scripts/tests/**`, `scripts/deploy.Tests.ps1` |
+| `scripts/migrate.{sh,ps1}` | `scripts/ci/**` |
+| `scripts/lib/common.{sh,ps1}` | `.gitignore`, editor config |
+
+This list lives in exactly one place — `is_deployable` in `scripts/ci/next-version.sh` — and both the gate and the release job call that script, so the version reported on a pull request is always the version its merge cuts. If you add a new file that ships to consumers, add it there or it will never trigger a release and every deployment will silently miss it.
+
+The pull request title sets the **size** of the bump, never whether one happens: `feat` gives a minor, `!` or `BREAKING CHANGE` gives a major, anything else falls to the patch floor. An unrecognised type must never block a release — a deployable change is a release regardless of how its author labelled it.
+
+Ordering inside the release job is load-bearing. The commit must be pushed **before** the tag is created, because tagging first produces a tag whose tree still holds the previous `VERSION` — a consumer resolving that tag would download content that contradicts the version it was told to expect. The job also runs under `concurrency: cancel-in-progress: false` so releases queue rather than cancel, and guards against re-triggering itself with both an actor check and `[skip ci]`.
+
+Any change that requires a consumer to act needs a section in `MIGRATIONS.md` and a matching baseline, or adopters on the previous version cannot upgrade.
+
+---
+
 ## What Belongs Where
 
 | If you are adding... | Put it in... |
@@ -147,6 +183,10 @@ The directory layout in this repo is **not** the layout in target repos. The dep
 | A pointer for a specific agent to find AGENTS.md | `core/<agent-specific-file>` |
 | A keyword route to discover a standard or playbook | `core/.context/index.md` |
 | Anything about how files are written to target repos | `scripts/deploy.sh` and `scripts/deploy.ps1` |
+| Anything about how a deployed repo detects or applies updates | `scripts/update.sh` and `scripts/update.ps1` |
+| Logic shared by the deploy, update and migrate scripts | `scripts/lib/common.sh` and `scripts/lib/common.ps1` |
+| Anything about how a release is computed or published | `scripts/ci/*` and `.github/workflows/release.yml` |
+| What a consumer must do to upgrade across a MAJOR | `MIGRATIONS.md` |
 
 If a change does not fit any row above, it probably does not belong in this repo.
 
@@ -183,7 +223,11 @@ Additional rules that apply specifically to maintainers of this template repo:
 - `scripts/deploy.sh` and `scripts/deploy.ps1` must remain behaviour-equivalent.
 - `scripts/deploy.sh` must run on macOS bash 3.2 with BSD userland as well as on Linux with GNU userland. No bash 4+ syntax, no GNU-only utilities.
 - `scripts/deploy.ps1` must run on Windows PowerShell 5.1 as well as PowerShell 7+. No PowerShell 7-only syntax.
+- The same portability and behaviour-equivalence rules apply in full to `scripts/update.*`, `scripts/migrate.*` and `scripts/lib/common.*`. They ship to consumers and run on their machines, not ours.
 - The deploy-script workflows must run on every pull request from any branch, with no path filters. Never narrow their triggers.
+- Never edit `VERSION`, `CHANGELOG.md` or `scripts/baselines/` by hand. CI owns all three.
+- Never add a file to a consumer's base layer that a consumer would want to edit. It belongs in the override layer, or it will be destroyed on the next update.
+- Never let an unrecognised commit type block a release. The type sets the size of a bump, never whether one happens.
 
 ## Decision Checklist
 
@@ -194,6 +238,10 @@ Before opening a PR, confirm:
 - [ ] If a new standard or playbook: added to `core/.context/index.md` and (for standards) the table in `core/AGENTS.md`.
 - [ ] If a deploy script change: both `scripts/deploy.sh` and `scripts/deploy.ps1` updated, and tested against a scratch directory — never against this repo.
 - [ ] If a deploy script change: `shellcheck --severity=warning` is clean, and no bash 4+ syntax, GNU-only utilities, or PowerShell 7-only syntax was introduced.
+- [ ] If an update or migrate script change: the bash and PowerShell versions were run against the same fixture and their output trees diffed for parity.
+- [ ] If a new file now ships to consumers: `is_deployable` in `scripts/ci/next-version.sh` was updated, or it will never trigger a release.
+- [ ] If consumers must act to upgrade: `MIGRATIONS.md` has a section for it.
+- [ ] No hand-edits to `VERSION`, `CHANGELOG.md` or `scripts/baselines/`.
 - [ ] If a new agent: redirect file added under `core/`, both deploy scripts updated, README table updated.
 - [ ] British English, kebab-case, prescriptive language.
 - [ ] No engagement artefacts or generated deploy outputs in the diff.

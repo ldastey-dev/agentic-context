@@ -56,7 +56,19 @@ jobs:
         run: |
           $ErrorActionPreference = 'Stop'
           Import-Module PSScriptAnalyzer
-          $results = Invoke-ScriptAnalyzer -Path ./scripts/deploy.ps1 -Settings ./PSScriptAnalyzerSettings.psd1
+          # Every PowerShell file that ships to a consumer must clear the 5.1
+          # baseline, not just deploy.ps1 - update and migrate run on their
+          # machines too.
+          $targets = @(
+              './scripts/deploy.ps1',
+              './scripts/update.ps1',
+              './scripts/migrate.ps1',
+              './scripts/lib/common.ps1'
+          )
+          $results = @()
+          foreach ($target in $targets) {
+              $results += Invoke-ScriptAnalyzer -Path $target -Settings ./PSScriptAnalyzerSettings.psd1
+          }
           if ($results) {
               $results | Format-Table -AutoSize | Out-String | Write-Host
               throw "PSScriptAnalyzer reported $($results.Count) compatibility finding(s)."

@@ -79,6 +79,8 @@ core/                                   Tier 1 — always in context (→ target
       code.md                           Naming, patterns, imports, core principles
       workflow.md                       Workflow orchestration, task management
       communication.md                  Writing standards, communication style
+    overrides/                          Consumer-owned layer — never overwritten by an update
+      README.md                         How to write an override (extend vs replace)
   .windsurfrules                        Windsurf redirect → AGENTS.md
   .cursor/rules/standards.mdc           Cursor redirect → AGENTS.md + index
   .devin/devin.json                     Devin config + index pointer
@@ -145,6 +147,7 @@ scripts/                                Distribution tooling (not deployed to ta
   update.sh / update.ps1                Staleness check and in-place update
   migrate.sh / migrate.ps1              One-off upgrade for pre-2.0 deployments
   lib/                                  Shared helpers (SemVer, manifest, hashing)
+  ci/                                   Release automation helpers (version, changelog, baseline)
   baselines/<version>.sha256            Per-release hashes of deployable files
   deploy.Tests.ps1                      Pester unit tests
   tests/                                End-to-end test suites (bash and PowerShell)
@@ -188,6 +191,96 @@ The `keywords` field feeds the context index. The `description` field is used by
 - **`<!-- PROJECT: ... -->`** HTML comments mark inline customisation points
 - SOLID principles always use **full names** (never SRP, OCP, etc.)
 - All instructions prescriptive: "must", "never", "always"
+
+## Customising a Deployment
+
+A deployed repository is split into two layers, and the split is what makes
+updates safe:
+
+| Layer | Path | Owner |
+| ----- | ---- | ----- |
+| Base | `.context/standards/`, `.context/playbooks/`, `.context/conventions/`, `.context/index.md` | This library. Replaced wholesale on every update. |
+| Overrides | `.context/overrides/` | You. Never touched by an update. |
+| Managed block | The delimited region of your `AGENTS.md` | This library. Everything outside it is yours. |
+
+**Never edit the base.** Anything you change there is restored on the next
+update. To customise, put a file at the mirrored path under
+`.context/overrides/`:
+
+```
+.context/standards/testing.md            <- base, do not edit
+.context/overrides/standards/testing.md  <- your version, wins
+```
+
+Each override declares how it combines with the base:
+
+- **`mode: extend`** — the library file is loaded, then yours is appended. Use
+  this when you are adding a rule. You keep receiving library improvements.
+- **`mode: replace`** — yours is loaded instead. Use this only when you need to
+  contradict the library, because you stop receiving improvements to that file.
+
+Prefer `extend`. Full detail is in `.context/overrides/README.md` in your
+deployment.
+
+Because overrides live outside the base, an update never has to merge anything:
+the base is deleted and recopied, and your layer is left alone. There are no
+conflicts to resolve.
+
+## Versioning
+
+This library is versioned with [Semantic Versioning](https://semver.org). The
+current version is in `VERSION` at the repository root, and every release is
+tagged `vX.Y.Z` with notes in `CHANGELOG.md`.
+
+Versions are cut automatically by CI, never by hand:
+
+- A release happens only when **deployable content** changes — `core/`,
+  `standards/`, `playbooks/`, and the deploy, update, migrate and shared library
+  scripts. Changes to the README, workflows or tests do not produce a release,
+  because they never reach a consumer.
+- The **size** of the bump comes from the pull request title, with a patch
+  floor: `feat` gives a minor, a `!` marker or `BREAKING CHANGE` gives a major,
+  anything else gives a patch.
+- `VERSION`, `CHANGELOG.md` and `scripts/baselines/` are written by the release
+  workflow. Pull requests that edit them by hand are rejected by the version
+  gate.
+
+For maintainers, the version a pull request will cut is reported in its checks
+before merge.
+
+## Staying Current
+
+A deployment goes stale the moment this library moves on. Each deployment
+carries `.context/manifest.json` recording the version it is on, and
+`.context/bin/` with the tooling to check and apply updates.
+
+```bash
+.context/bin/update.sh --status   # local state only, no network
+.context/bin/update.sh --check    # is there a newer version?
+.context/bin/update.sh --apply    # refresh the base to the latest
+```
+
+```powershell
+.context/bin/update.ps1 -Status
+.context/bin/update.ps1 -Check
+.context/bin/update.ps1 -Apply
+```
+
+The check costs a single fetch of a six-byte `VERSION` file from a CDN-cached
+URL — no authentication, no rate limit, and nothing meaningful added to an agent
+session. It **fails open**: if the network is unavailable the check reports so
+and exits zero, so it can never block your work.
+
+`--apply` deletes and recopies the base, rewrites only the managed block of
+`AGENTS.md`, and leaves `.context/overrides/` untouched. It reports any base
+file you had edited and tells you where to move the change.
+
+The deployed `AGENTS.md` carries an update checkpoint so an agent prompts you on
+a schedule you choose — weekly by default. Change the frequency there, or pin to
+a major line in the manifest to refuse automatic majors.
+
+Existing deployments made before the override model must be migrated once. See
+[MIGRATIONS.md](MIGRATIONS.md).
 
 ## Updating Standards
 

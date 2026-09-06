@@ -27,9 +27,12 @@ fi
 # sha256sum and GNU find accepts -perm /111; macOS ships BSD equivalents that
 # reject both. Resolve each once so the suite runs identically on Linux and macOS.
 if command -v sha256sum >/dev/null 2>&1; then
-  checksum_tree() { find "$1" -type f -exec sha256sum {} + | sort; }
+  # manifest.json is excluded: it records the deployment timestamp, so it is
+  # expected to differ between runs. TC5 asserts its stability separately,
+  # comparing every field except deployedAt.
+  checksum_tree() { find "$1" -type f ! -name 'manifest.json' -exec sha256sum {} + | sort; }
 elif command -v shasum >/dev/null 2>&1; then
-  checksum_tree() { find "$1" -type f -exec shasum -a 256 {} + | sort; }
+  checksum_tree() { find "$1" -type f ! -name 'manifest.json' -exec shasum -a 256 {} + | sort; }
 else
   echo "ERROR: neither sha256sum nor shasum is available" >&2
   exit 1
@@ -297,7 +300,22 @@ else
   diff "$TC5_PERMS1" "$TC5_PERMS2" || true
 fi
 
-rm -rf "$TC5_DIR" "$TC5_CHECKSUMS1" "$TC5_CHECKSUMS2" "$TC5_PERMS1" "$TC5_PERMS2"
+# The manifest is excluded from the byte comparison above because it carries a
+# timestamp. Every other field must still be identical across runs, or a
+# redeploy is silently changing what the update tooling believes is installed.
+TC5_MAN1=$(mktemp)
+TC5_MAN2=$(mktemp)
+grep -v '"deployedAt"' "$TC5_DIR/.context/manifest.json" > "$TC5_MAN2"
+"$SCRIPTS_DIR/deploy.sh" --agents all --overwrite "$TC5_DIR" >/dev/null 2>&1
+grep -v '"deployedAt"' "$TC5_DIR/.context/manifest.json" > "$TC5_MAN1"
+if diff -q "$TC5_MAN1" "$TC5_MAN2" >/dev/null 2>&1; then
+  pass "Manifest identical across runs apart from deployedAt"
+else
+  fail "Manifest differs across runs beyond deployedAt"
+  diff "$TC5_MAN2" "$TC5_MAN1" || true
+fi
+
+rm -rf "$TC5_DIR" "$TC5_CHECKSUMS1" "$TC5_CHECKSUMS2" "$TC5_PERMS1" "$TC5_PERMS2" "$TC5_MAN1" "$TC5_MAN2"
 
 # ═══════════════════════════════════════════════════════════════════════
 # TC6: validate-config passes — deployed copy
@@ -320,6 +338,128 @@ else
 fi
 
 rm -rf "$TC6_DIR"
+
+# ═══════════════════════════════════════════════════════════════════════
+# TC7: manifest and override layer are deployed
+# ═══════════════════════════════════════════════════════════════════════
+echo ""
+echo "=== TC7: manifest and override layer ==="
+TC7_DIR=$(mktemp -d)
+"$SCRIPTS_DIR/deploy.sh" --agents all --overwrite "$TC7_DIR" >/dev/null 2>&1
+
+if [ -f "$TC7_DIR/.context/manifest.json" ]; then
+  pass "manifest.json written"
+else
+  fail "manifest.json missing"
+fi
+
+TC7_VER=$(tr -d ' \t\r\n' < "$REPO_DIR/VERSION")
+if grep -q "\"version\": \"$TC7_VER\"" "$TC7_DIR/.context/manifest.json"; then
+  pass "manifest records the current version ($TC7_VER)"
+else
+  fail "manifest version does not match VERSION"
+fi
+
+if [ -d "$TC7_DIR/.context/overrides" ] && [ -f "$TC7_DIR/.context/overrides/README.md" ]; then
+  pass "override layer scaffolded"
+else
+  fail "override layer missing"
+fi
+
+for TC7_TOOL in update.sh update.ps1 lib/common.sh lib/common.ps1; do
+  if [ -f "$TC7_DIR/.context/bin/$TC7_TOOL" ]; then
+    pass "bin/$TC7_TOOL deployed"
+  else
+    fail "bin/$TC7_TOOL missing"
+  fi
+done
+
+# The managed block is what lets an update rewrite framework content without
+# touching the consumer's own AGENTS.md prose.
+if grep -q 'agentic-context:begin' "$TC7_DIR/AGENTS.md" && grep -q 'agentic-context:end' "$TC7_DIR/AGENTS.md"; then
+  pass "AGENTS.md carries the managed block markers"
+else
+  fail "AGENTS.md is missing the managed block markers"
+fi
+
+# --status must work without network access and must not fail on a clean tree.
+if (cd "$TC7_DIR" && bash .context/bin/update.sh --status 2>&1 | grep -q "agentic-context $TC7_VER"); then
+  pass "update.sh --status reports the deployed version"
+else
+  fail "update.sh --status did not report the deployed version"
+fi
+
+rm -rf "$TC7_DIR"
+
+# ═══════════════════════════════════════════════════════════════════════
+# TC8: consumer edits outside the managed block survive a redeploy
+# ═══════════════════════════════════════════════════════════════════════
+echo ""
+echo "=== TC8: consumer AGENTS.md content survives redeploy ==="
+TC8_DIR=$(mktemp -d)
+"$SCRIPTS_DIR/deploy.sh" --agents all --overwrite "$TC8_DIR" >/dev/null 2>&1
+
+printf '\n## Our own section\nSentinel-below-block\n' >> "$TC8_DIR/AGENTS.md"
+TC8_TMP=$(mktemp)
+{ printf 'Sentinel-above-block\n\n'; cat "$TC8_DIR/AGENTS.md"; } > "$TC8_TMP"
+mv "$TC8_TMP" "$TC8_DIR/AGENTS.md"
+
+"$SCRIPTS_DIR/deploy.sh" --agents all --overwrite "$TC8_DIR" >/dev/null 2>&1
+
+if grep -q 'Sentinel-above-block' "$TC8_DIR/AGENTS.md"; then
+  pass "content above the managed block survived redeploy"
+else
+  fail "content above the managed block was lost on redeploy"
+fi
+
+if grep -q 'Sentinel-below-block' "$TC8_DIR/AGENTS.md"; then
+  pass "content below the managed block survived redeploy"
+else
+  fail "content below the managed block was lost on redeploy"
+fi
+
+# An override the consumer wrote must never be overwritten by a redeploy.
+mkdir -p "$TC8_DIR/.context/overrides/standards"
+printf 'Sentinel-override\n' > "$TC8_DIR/.context/overrides/standards/testing.md"
+"$SCRIPTS_DIR/deploy.sh" --agents all --overwrite "$TC8_DIR" >/dev/null 2>&1
+if grep -q 'Sentinel-override' "$TC8_DIR/.context/overrides/standards/testing.md"; then
+  pass "consumer override survived redeploy"
+else
+  fail "consumer override was overwritten by redeploy"
+fi
+
+rm -rf "$TC8_DIR"
+
+# ═══════════════════════════════════════════════════════════════════════
+# TC9: release version computation
+# ═══════════════════════════════════════════════════════════════════════
+echo ""
+echo "=== TC9: next-version computation ==="
+TC9_LIST=$(mktemp)
+
+check_next() {
+  # check_next <changed-path> <subject> <expected>
+  local got
+  printf '%s\n' "$1" > "$TC9_LIST"
+  got=$("$SCRIPTS_DIR/ci/next-version.sh" --changed-files "$TC9_LIST" --subject "$2" --current 1.2.3)
+  if [ "$got" = "$3" ]; then
+    pass "next-version: $1 + '$2' -> $3"
+  else
+    fail "next-version: $1 + '$2' gave '$got', expected '$3'"
+  fi
+}
+
+check_next "README.md" "feat: x" "none"
+check_next ".github/workflows/x.yml" "feat: x" "none"
+check_next "scripts/tests/test-deploy.sh" "fix: x" "none"
+check_next "standards/testing.md" "docs: x" "1.2.4"
+check_next "core/AGENTS.md" "feat: x" "1.3.0"
+check_next "playbooks/assess/a.md" "feat!: x" "2.0.0"
+check_next "scripts/lib/common.ps1" "fix(deploy)!: x" "2.0.0"
+# An unrecognised type must still release, at the patch floor.
+check_next "standards/testing.md" "wibble: x" "1.2.4"
+
+rm -f "$TC9_LIST"
 
 # ═══════════════════════════════════════════════════════════════════════
 # Summary
