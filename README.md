@@ -293,9 +293,12 @@ The title sets the size of the bump, never whether one happens: a deployable
 change is released regardless of how it was labelled, so mislabelling can
 understate a release but can never lose it.
 
-`VERSION`, `CHANGELOG.md` and `scripts/baselines/` are written by the release
-workflow. Pull requests that edit them by hand are rejected by the version gate,
-which also reports the exact version a merge will cut before it is merged.
+`VERSION`, `CHANGELOG.md` and `scripts/baselines/<version>.sha256` are written by
+the release workflow. Pull requests that edit them by hand are rejected by the
+version gate, which also reports the exact version a merge will cut before it is
+merged. The one baseline CI does not own is
+`scripts/baselines/unversioned.sha256`, which records the pre-versioning content
+for `migrate.sh` and is committed by hand.
 
 ## Staying Current
 
