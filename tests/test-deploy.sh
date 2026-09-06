@@ -22,6 +22,21 @@ if [ -x "$REPO_DIR/README.md" ]; then
   PERMS_SUPPORTED=false
 fi
 
+# Portable checksum and executable-file listing. GNU coreutils provides
+# sha256sum and GNU find accepts -perm /111; macOS ships BSD equivalents that
+# reject both. Resolve each once so the suite runs identically on Linux and macOS.
+if command -v sha256sum >/dev/null 2>&1; then
+  checksum_tree() { find "$1" -type f -exec sha256sum {} + | sort; }
+elif command -v shasum >/dev/null 2>&1; then
+  checksum_tree() { find "$1" -type f -exec shasum -a 256 {} + | sort; }
+else
+  echo "ERROR: neither sha256sum nor shasum is available" >&2
+  exit 1
+fi
+
+# -exec test -x is portable; GNU -perm /111 and BSD -perm +111 are not interchangeable.
+list_executables() { find "$1" -type f -exec test -x {} \; -print | sort; }
+
 PASSED=0
 FAILED=0
 
@@ -260,12 +275,12 @@ TC5_PERMS1=$(mktemp)
 TC5_PERMS2=$(mktemp)
 
 "$REPO_DIR/deploy.sh" --agents all --overwrite "$TC5_DIR" >/dev/null 2>&1
-find "$TC5_DIR" -type f -exec sha256sum {} + | sort > "$TC5_CHECKSUMS1"
-find "$TC5_DIR" -type f -perm /111 | sort > "$TC5_PERMS1"
+checksum_tree "$TC5_DIR" > "$TC5_CHECKSUMS1"
+list_executables "$TC5_DIR" > "$TC5_PERMS1"
 
 "$REPO_DIR/deploy.sh" --agents all --overwrite "$TC5_DIR" >/dev/null 2>&1
-find "$TC5_DIR" -type f -exec sha256sum {} + | sort > "$TC5_CHECKSUMS2"
-find "$TC5_DIR" -type f -perm /111 | sort > "$TC5_PERMS2"
+checksum_tree "$TC5_DIR" > "$TC5_CHECKSUMS2"
+list_executables "$TC5_DIR" > "$TC5_PERMS2"
 
 if diff -q "$TC5_CHECKSUMS1" "$TC5_CHECKSUMS2" >/dev/null 2>&1; then
   pass "File checksums identical across both runs"

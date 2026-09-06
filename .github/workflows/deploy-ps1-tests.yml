@@ -1,30 +1,68 @@
 name: deploy.ps1 tests
 
+# deploy.ps1 is a critical script: it is the Windows entry point for every
+# consumer of this library. It must work on Windows PowerShell 5.1 and on
+# PowerShell 7+ across Windows, Linux and macOS, so it is tested on every push
+# and every pull request regardless of branch or changed paths.
 on:
+  # pull_request covers every PR from any head branch, and re-runs on each new
+  # commit pushed to that branch (the synchronize event). push is scoped to main
+  # so protecting the trunk does not double every PR run and slow the queue.
   push:
     branches: [main]
-    paths:
-      - 'deploy.ps1'
-      - 'deploy.Tests.ps1'
-      - 'PSScriptAnalyzerSettings.psd1'
-      - 'tests/**'
-      - 'core/**'
-      - 'standards/**'
-      - 'playbooks/**'
-      - '.github/workflows/deploy-ps1-tests.yml'
   pull_request:
-    branches: [main]
-    paths:
-      - 'deploy.ps1'
-      - 'deploy.Tests.ps1'
-      - 'PSScriptAnalyzerSettings.psd1'
-      - 'tests/**'
-      - 'core/**'
-      - 'standards/**'
-      - 'playbooks/**'
-      - '.github/workflows/deploy-ps1-tests.yml'
+
+# Supersede in-flight runs for the same ref so feedback tracks the latest push.
+concurrency:
+  group: deploy-ps1-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
 
 jobs:
+  # Fast gate (seconds): parse and static compatibility analysis, so a syntax or
+  # 5.1-incompatibility break is reported without waiting for the Windows
+  # PowerShell 5.1 end-to-end job, which is the slowest in the matrix.
+  lint:
+    name: parse and compatibility analysis
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install PSScriptAnalyzer
+        shell: pwsh
+        run: Install-Module -Name PSScriptAnalyzer -Force -SkipPublisherCheck -Scope CurrentUser
+
+      - name: Parse check
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $failed = $false
+          foreach ($file in (Get-ChildItem -Path . -Recurse -Include '*.ps1','*.psd1' -File)) {
+              $errors = $null
+              [System.Management.Automation.Language.Parser]::ParseFile($file.FullName, [ref]$null, [ref]$errors) | Out-Null
+              if ($errors) {
+                  Write-Host "::error::Parse errors in $($file.FullName)"
+                  $errors | ForEach-Object { Write-Host "  $($_.Message)" }
+                  $failed = $true
+              }
+          }
+          if ($failed) { exit 1 }
+          Write-Host "All PowerShell files parse cleanly."
+
+      - name: PSScriptAnalyzer compatibility rules (5.1 and 7.0)
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          Import-Module PSScriptAnalyzer
+          $results = Invoke-ScriptAnalyzer -Path ./deploy.ps1 -Settings ./PSScriptAnalyzerSettings.psd1
+          if ($results) {
+              $results | Format-Table -AutoSize | Out-String | Write-Host
+              throw "PSScriptAnalyzer reported $($results.Count) compatibility finding(s)."
+          }
+          Write-Host "No compatibility findings for Windows PowerShell 5.1 or PowerShell 7.0."
+
   test:
     strategy:
       fail-fast: false
@@ -32,7 +70,8 @@ jobs:
         include:
           # Windows PowerShell 5.1 is the host that reported both bugs this workflow guards
           # against (the BOM-less Windows-1252 parse break, and Add-Type's CurrentDirectory
-          # side effect) - it must be tested directly, not simulated.
+          # side effect) - it must be tested directly, not simulated. 5.1 is the oldest
+          # supported baseline; if it breaks here, the script is not shippable.
           - os: windows-latest
             shell: powershell
             name: windows-powershell-5.1
@@ -42,6 +81,9 @@ jobs:
           - os: ubuntu-latest
             shell: pwsh
             name: ubuntu-pwsh
+          - os: macos-latest
+            shell: pwsh
+            name: macos-pwsh
     runs-on: ${{ matrix.os }}
     name: ${{ matrix.name }}
     defaults:
@@ -50,10 +92,22 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
+      - name: Report PowerShell version
+        run: $PSVersionTable | Format-List | Out-String | Write-Host
+
       - name: Install test dependencies
         run: |
           Install-Module -Name Pester -MinimumVersion 5.0 -Force -SkipPublisherCheck -Scope CurrentUser
           Install-Module -Name PSScriptAnalyzer -Force -SkipPublisherCheck -Scope CurrentUser
+
+      # deploy.Tests.ps1 skips its PSScriptAnalyzer compatibility test when the module
+      # is absent. A silent skip in CI would hide 5.1 incompatibilities, so fail loudly
+      # if the install step did not take effect.
+      - name: Verify PSScriptAnalyzer is available
+        run: |
+          if (-not (Get-Module -ListAvailable -Name PSScriptAnalyzer)) {
+              throw "PSScriptAnalyzer is not available; compatibility tests would silently skip."
+          }
 
       - name: Run Pester unit tests
         run: Invoke-Pester -Path ./deploy.Tests.ps1 -CI

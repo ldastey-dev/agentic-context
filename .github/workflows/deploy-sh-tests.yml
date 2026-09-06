@@ -1,0 +1,99 @@
+name: deploy.sh tests
+
+# deploy.sh is a critical script: every consumer of this library runs it to
+# install the templates. It must work on both Linux and macOS, so it is tested
+# on every push and every pull request regardless of branch or changed paths.
+on:
+  # pull_request covers every PR from any head branch, and re-runs on each new
+  # commit pushed to that branch (the synchronize event). push is scoped to main
+  # so protecting the trunk does not double every PR run and slow the queue.
+  push:
+    branches: [main]
+  pull_request:
+
+# Supersede in-flight runs for the same ref so feedback tracks the latest push.
+concurrency:
+  group: deploy-sh-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  # Fast gate (seconds): catches syntax errors and shell bugs before the
+  # end-to-end matrix finishes. Runs in parallel with the matrix, not before it,
+  # so a green lint never delays real test results.
+  lint:
+    name: shellcheck and syntax
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install shellcheck
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y shellcheck
+
+      - name: Collect shell scripts
+        run: |
+          # Every tracked .sh file, so new playbook scripts are covered automatically.
+          git ls-files '*.sh'
+
+      - name: Syntax check (bash -n)
+        run: |
+          status=0
+          while IFS= read -r script; do
+            bash -n "$script" || status=1
+          done < <(git ls-files '*.sh')
+          exit $status
+
+      - name: ShellCheck
+        run: |
+          # --severity=warning fails on portability and correctness findings, not
+          # just hard errors. The tree is clean at this level; keep it that way.
+          status=0
+          while IFS= read -r script; do
+            shellcheck --shell=bash --severity=warning "$script" || status=1
+          done < <(git ls-files '*.sh')
+          exit $status
+
+  test:
+    name: ${{ matrix.name }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Ubuntu: GNU coreutils and GNU find.
+          - os: ubuntu-latest
+            name: ubuntu-bash
+          # macOS: BSD coreutils, BSD find, and /bin/bash 3.2. This combination
+          # is what breaks GNU-only constructs such as sha256sum and -perm /111,
+          # so it must be tested on a real macOS host rather than simulated.
+          - os: macos-latest
+            name: macos-bash
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Report bash version
+        run: |
+          echo "default bash: $(bash --version | head -1)"
+          echo "/bin/bash:    $(/bin/bash --version | head -1)"
+
+      - name: Run end-to-end deploy tests
+        run: bash tests/test-deploy.sh
+
+      # macOS ships bash 3.2 as /bin/bash and deploy.sh declares #!/bin/bash,
+      # so consumers on macOS run it under 3.2. Assert that explicitly instead of
+      # relying on whichever bash happens to be first on PATH.
+      - name: Run end-to-end deploy tests under /bin/bash
+        if: runner.os == 'macOS'
+        run: /bin/bash tests/test-deploy.sh
+
+      - name: Verify deploy.sh runs from an arbitrary working directory
+        run: |
+          target="$(mktemp -d)"
+          cd "$(mktemp -d)"
+          "$GITHUB_WORKSPACE/deploy.sh" --agents all --overwrite "$target"
+          test -f "$target/AGENTS.md"
+          test -f "$target/.context/index.md"

@@ -26,3 +26,6 @@
 # Keep them locally under /engagements/ so they cannot be accidentally
 # committed back to this template repo.
 /engagements/
+
+# Pester test output (Invoke-Pester -CI)
+testResults.xml
