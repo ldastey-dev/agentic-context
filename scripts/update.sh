@@ -268,6 +268,12 @@ for pair in "standards:$SRC/standards" "playbooks:$SRC/playbooks" "conventions:$
   from="${pair#*:}"
   [ -d "$from" ] || partial_apply "downloaded archive is missing ${pair%%:*}/ - nothing was changed."
 done
+# index.md is the routing table - without it no standard or playbook is
+# discoverable, so it is mandatory base content, not an optional extra. It is
+# validated here rather than skipped at the copy: skipping left the previous
+# index.md behind while every other area was replaced, so a stale routing table
+# could survive an update indefinitely. Deleting it instead would be worse.
+[ -f "$SRC/core/.context/index.md" ] || partial_apply "downloaded archive is missing core/.context/index.md - nothing was changed."
 
 for pair in "standards:$SRC/standards" "playbooks:$SRC/playbooks" "conventions:$SRC/core/.context/conventions"; do
   name="${pair%%:*}"
@@ -279,9 +285,7 @@ for pair in "standards:$SRC/standards" "playbooks:$SRC/playbooks" "conventions:$
   fi
 done
 
-if [ -f "$SRC/core/.context/index.md" ]; then
-  cp "$SRC/core/.context/index.md" "$CONTEXT_DIR/index.md" || partial_apply "could not write index.md."
-fi
+cp "$SRC/core/.context/index.md" "$CONTEXT_DIR/index.md" || partial_apply "could not write index.md."
 
 # Refresh the update tooling itself, so a fixed updater reaches consumers.
 mkdir -p "$CONTEXT_DIR/bin/lib" || partial_apply "could not create .context/bin/lib."

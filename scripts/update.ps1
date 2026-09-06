@@ -228,6 +228,18 @@ try {
         }
     }
 
+    # index.md is the routing table - without it no standard or playbook is
+    # discoverable, so it is mandatory base content, not an optional extra. It
+    # is validated here rather than skipped at the copy: skipping left the
+    # previous index.md behind while every other area was replaced, so a stale
+    # routing table could survive an update indefinitely. Deleting it instead
+    # would be worse.
+    $srcIndex = Join-Path $srcPath 'core/.context/index.md'
+    if (-not (Test-Path -LiteralPath $srcIndex)) {
+        Write-Error 'Downloaded archive is missing core/.context/index.md - nothing was changed.'
+        exit 1
+    }
+
     foreach ($area in $areas) {
         $dest = Join-Path $ContextDir $area.Name
         if (Test-Path -LiteralPath $dest) { Remove-Item -LiteralPath $dest -Recurse -Force }
@@ -235,10 +247,7 @@ try {
         Copy-Item -Path (Join-Path $area.From '*') -Destination $dest -Recurse -Force
     }
 
-    $srcIndex = Join-Path $srcPath 'core/.context/index.md'
-    if (Test-Path -LiteralPath $srcIndex) {
-        Copy-Item -LiteralPath $srcIndex -Destination (Join-Path $ContextDir 'index.md') -Force
-    }
+    Copy-Item -LiteralPath $srcIndex -Destination (Join-Path $ContextDir 'index.md') -Force
 
     # Refresh the update tooling itself, so a fixed updater reaches consumers.
     $binDir = Join-Path $ContextDir 'bin'
