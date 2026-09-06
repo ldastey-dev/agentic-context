@@ -130,7 +130,7 @@ playbooks/                              Tier 2 — on demand (→ target .contex
   refactor/                             Structured code change procedures (3)
     safe-refactor.md, extract-module.md, dependency-upgrade.md
   debug/                                Structured defect resolution (1)
-    debug.md
+    scientific-debugging.md
   docs/                                 Developer-facing documentation generation (1)
     gitbook.md
   setup/                                Setup and tooling playbooks (4)

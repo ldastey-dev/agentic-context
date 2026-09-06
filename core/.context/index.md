@@ -127,7 +127,7 @@ Combine multiple matches when a task spans domains.
 
 | Keywords | File | Summary |
 |----------|------|---------|
-| debug, debugging, bug, failing test, crash, error, fix | `.context/playbooks/debug/debug.md` | Scientific debugging runbook: reproduce, locate, fix, verify, search |
+| debug, debugging, bug, failing test, crash, error, fix | `.context/playbooks/debug/scientific-debugging.md` | Scientific debugging runbook: reproduce, locate, fix, verify, search |
 
 ---
 

@@ -1,5 +1,5 @@
 ---
-name: debug
+name: debug-scientific-debugging
 description: "Run scientific debugging on a failing test, crash, or bug — reproduce, locate, hypothesise, fix, verify, and search for sibling defects."
 keywords: [debug, debugging, bug, failing test, crash, error, fix, reproduce]
 ---
