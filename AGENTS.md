@@ -129,6 +129,9 @@ The directory layout in this repo is **not** the layout in target repos. The dep
 - `deploy.sh` (bash) and `deploy.ps1` (PowerShell) must stay behaviour-equivalent. A change to one usually needs the matching change in the other.
 - Both must honour the overwrite guard (`--overwrite` / `--no-overwrite`, interactive prompt otherwise).
 - The interactive `--agents` menu must work on macOS, Linux, and Windows PowerShell.
+- **`deploy.sh` must be portable to macOS and Linux.** macOS ships bash 3.2 as `/bin/bash` and BSD userland, so bash 4+ syntax (`declare -A`, `mapfile`, `${var,,}`) and GNU-only utilities are forbidden. Use portable equivalents: `shasum -a 256` or a `sha256sum` fallback rather than assuming `sha256sum`; `find … -exec test -x {} \; -print` rather than `find -perm /111`; `sed -i.bak` (then delete the backup) rather than bare `sed -i`. The same rule applies to every `.sh` file in `playbooks/`.
+- **`deploy.ps1` must run on Windows PowerShell 5.1 and PowerShell 7+.** 5.1 is the oldest supported baseline and is where the historic parse and `Add-Type` bugs surfaced. PowerShell 7-only syntax (ternaries, `??`, `-Parallel`) is forbidden. `PSScriptAnalyzerSettings.psd1` encodes this and is enforced in CI.
+- **CI enforces both.** `.github/workflows/deploy-sh-tests.yml` and `.github/workflows/deploy-ps1-tests.yml` run on every push and every pull request, on every branch, with no path filters — these scripts are load-bearing for every consumer, so they are never allowed to go untested. `deploy.sh` is tested on Ubuntu and macOS (including explicitly under `/bin/bash` 3.2) and linted with `shellcheck --severity=warning`; `deploy.ps1` is tested on Windows PowerShell 5.1, and on PowerShell 7 across Windows, Linux and macOS. Do not add path filters or branch filters to these workflows.
 - **Never run `deploy.sh` or `deploy.ps1` against this repository.** This repo is the source library, not a deploy target. Running the scripts here writes `/AGENTS.md`, `/CLAUDE.md`, `/.context/`, `/.cursor/`, `/.devin/`, `/.windsurfrules`, `/.github/copilot-instructions.md`, `/.claude/`, and `/.github/skills/` at the repo root — the `.gitignore` keeps those out of commits, but they overlay tracked source paths (`core/AGENTS.md` is the tracked source; `/AGENTS.md` is the tracked maintainer guide) and create confusing untracked state. To test a deploy-script change, run it against an empty scratch directory (`mkdir /tmp/agentic-context-test && ./deploy.sh /tmp/agentic-context-test`) or another repo entirely.
 
 ---
@@ -178,6 +181,9 @@ Additional rules that apply specifically to maintainers of this template repo:
 - Keep authoring (markdown) and distribution (deploy scripts) separate in every change.
 - Never commit engagement artefacts or root-level deploy outputs.
 - `deploy.sh` and `deploy.ps1` must remain behaviour-equivalent.
+- `deploy.sh` must run on macOS bash 3.2 with BSD userland as well as on Linux with GNU userland. No bash 4+ syntax, no GNU-only utilities.
+- `deploy.ps1` must run on Windows PowerShell 5.1 as well as PowerShell 7+. No PowerShell 7-only syntax.
+- The deploy-script workflows must run on every branch and every pull request with no path filters. Never narrow their triggers.
 
 ## Decision Checklist
 
@@ -187,6 +193,7 @@ Before opening a PR, confirm:
 - [ ] Prose lives in `standards/`, `playbooks/`, or `core/.context/` — not in a per-agent file.
 - [ ] If a new standard or playbook: added to `core/.context/index.md` and (for standards) the table in `core/AGENTS.md`.
 - [ ] If a deploy script change: both `deploy.sh` and `deploy.ps1` updated, and tested against a scratch directory — never against this repo.
+- [ ] If a deploy script change: `shellcheck --severity=warning` is clean, and no bash 4+ syntax, GNU-only utilities, or PowerShell 7-only syntax was introduced.
 - [ ] If a new agent: redirect file added under `core/`, both deploy scripts updated, README table updated.
 - [ ] British English, kebab-case, prescriptive language.
 - [ ] No engagement artefacts or generated deploy outputs in the diff.

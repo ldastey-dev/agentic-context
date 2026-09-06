@@ -225,7 +225,6 @@ interactive_select_agents() {
 
   while true; do
     key=""
-    sequence=""
     IFS= read -rsn1 key || true
 
     if [[ "$key" == $'\x1b' ]]; then
