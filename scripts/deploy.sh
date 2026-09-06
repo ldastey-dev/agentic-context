@@ -810,14 +810,18 @@ seed_dir_if_absent "$SOURCE_ROOT/core/.context/overrides" "$TARGET/.context/over
 # Update tooling, shipped into the target so it can maintain itself.
 echo "  Installing update tooling → $TARGET/.context/bin/"
 mkdir -p "$TARGET/.context/bin"
+# Routed through copy_file so --no-overwrite means what it says. Every other
+# base file honours the guard, and silently rewriting the tooling regardless
+# would make the flag misleading. Refreshing a stale updater unconditionally
+# is update.sh's job, where replacing the base is the declared intent.
 for tool in update.sh update.ps1 migrate.sh migrate.ps1; do
   if [[ -f "$SOURCE_ROOT/scripts/$tool" ]]; then
-    cp "$SOURCE_ROOT/scripts/$tool" "$TARGET/.context/bin/$tool"
+    copy_file "$SOURCE_ROOT/scripts/$tool" "$TARGET/.context/bin/$tool"
   fi
 done
 mkdir -p "$TARGET/.context/bin/lib"
-cp "$SOURCE_ROOT/scripts/lib/common.sh" "$TARGET/.context/bin/lib/common.sh"
-[[ -f "$SOURCE_ROOT/scripts/lib/common.ps1" ]] && cp "$SOURCE_ROOT/scripts/lib/common.ps1" "$TARGET/.context/bin/lib/common.ps1"
+copy_file "$SOURCE_ROOT/scripts/lib/common.sh" "$TARGET/.context/bin/lib/common.sh"
+[[ -f "$SOURCE_ROOT/scripts/lib/common.ps1" ]] && copy_file "$SOURCE_ROOT/scripts/lib/common.ps1" "$TARGET/.context/bin/lib/common.ps1"
 chmod +x "$TARGET/.context/bin"/*.sh 2>/dev/null || true
 
 printf '%s\n' "$DEPLOY_VERSION" > "$TARGET/.context/VERSION"

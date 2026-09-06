@@ -683,6 +683,48 @@ fi
 
 rm -rf "$TC13_DIR"
 
+# ═══════════════════════════════════════════════════════════════════════
+# TC14: --no-overwrite applies to the shipped tooling too
+#
+# .context/bin/* was installed with a raw cp that bypassed the overwrite
+# guard, so --no-overwrite silently rewrote it anyway and the flag lied.
+# Refreshing a stale updater unconditionally is update.sh's job.
+# ═══════════════════════════════════════════════════════════════════════
+echo ""
+echo "=== TC14: overwrite guard covers .context/bin ==="
+
+TC14_DIR=$(mktemp -d)
+"$SCRIPTS_DIR/deploy.sh" --agents claude --overwrite "$TC14_DIR" >/dev/null 2>&1
+
+if [ -f "$TC14_DIR/.context/bin/update.sh" ] && [ -f "$TC14_DIR/.context/bin/lib/common.sh" ]; then
+  pass "deploy: update tooling installed on a fresh deployment"
+else
+  fail "deploy: update tooling missing from a fresh deployment"
+fi
+
+printf 'LOCAL EDIT\n' > "$TC14_DIR/.context/bin/update.sh"
+"$SCRIPTS_DIR/deploy.sh" --agents claude --no-overwrite "$TC14_DIR" >/dev/null 2>&1
+if grep -q 'LOCAL EDIT' "$TC14_DIR/.context/bin/update.sh"; then
+  pass "deploy: --no-overwrite is honoured for .context/bin"
+else
+  fail "deploy: --no-overwrite was ignored for .context/bin"
+fi
+
+"$SCRIPTS_DIR/deploy.sh" --agents claude --overwrite "$TC14_DIR" >/dev/null 2>&1
+if ! grep -q 'LOCAL EDIT' "$TC14_DIR/.context/bin/update.sh"; then
+  pass "deploy: --overwrite still refreshes .context/bin"
+else
+  fail "deploy: --overwrite no longer refreshes .context/bin"
+fi
+
+if [ -x "$TC14_DIR/.context/bin/update.sh" ]; then
+  pass "deploy: shipped tooling remains executable"
+else
+  fail "deploy: shipped tooling lost its executable bit"
+fi
+
+rm -rf "$TC14_DIR"
+
 echo ""
 echo "=== Results ==="
 echo "  Passed: $PASSED"

@@ -732,16 +732,21 @@ foreach ($dir in @($binDst, $binLibDst)) {
         New-Item -ItemType Directory -Path $dir -Force | Out-Null
     }
 }
+# Routed through Copy-SingleFile so -NoOverwrite means what it says. Every
+# other base file honours the guard, and silently rewriting the tooling
+# regardless would make the flag misleading. Refreshing a stale updater
+# unconditionally is update.ps1's job, where replacing the base is the
+# declared intent.
 foreach ($tool in @('update.sh', 'update.ps1', 'migrate.sh', 'migrate.ps1')) {
     $toolSrc = Join-Path $SourceRoot "scripts/$tool"
     if (Test-Path -LiteralPath $toolSrc) {
-        Copy-Item -LiteralPath $toolSrc -Destination (Join-Path $binDst $tool) -Force
+        Copy-SingleFile -Source $toolSrc -Destination (Join-Path $binDst $tool)
     }
 }
 foreach ($libFile in @('common.sh', 'common.ps1')) {
     $libSrc = Join-Path $SourceRoot "scripts/lib/$libFile"
     if (Test-Path -LiteralPath $libSrc) {
-        Copy-Item -LiteralPath $libSrc -Destination (Join-Path $binLibDst $libFile) -Force
+        Copy-SingleFile -Source $libSrc -Destination (Join-Path $binLibDst $libFile)
     }
 }
 
