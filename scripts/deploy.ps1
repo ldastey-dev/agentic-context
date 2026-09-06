@@ -753,7 +753,24 @@ foreach ($libFile in @('common.sh', 'common.ps1')) {
 Set-Content -LiteralPath (Join-Path $script:Target '.context/VERSION') -Value $DeployVersion -Encoding UTF8
 
 Write-Host "  Writing manifest -> $(Join-Path $script:Target '.context/manifest.json')"
-Write-AcManifest -ContextDir (Join-Path $script:Target '.context') -Version $DeployVersion -Agents $script:EnabledAgents
+# pin and checkFrequency are consumer configuration, not derived state.
+# Redeploying over an existing deployment must not silently undo a deliberate
+# choice - "*" to accept majors, an exact version to freeze, or a check
+# frequency other than weekly. update.sh and update.ps1 already preserve both;
+# deploy has to agree or a redeploy quietly resets them.
+$manifestPath = Join-Path $script:Target '.context/manifest.json'
+$existingPin = ''
+$existingFreq = 'weekly'
+if (Test-Path -LiteralPath $manifestPath) {
+    try {
+        $existing = Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json
+        if ($existing.pin) { $existingPin = [string]$existing.pin }
+        if ($existing.checkFrequency) { $existingFreq = [string]$existing.checkFrequency }
+    } catch {
+        Write-Host "    manifest.json is unreadable - rewriting with defaults."
+    }
+}
+Write-AcManifest -ContextDir (Join-Path $script:Target '.context') -Version $DeployVersion -Agents $script:EnabledAgents -Pin $existingPin -CheckFrequency $existingFreq
 
 Write-Host ""
 Write-Host "Done. Next steps:"

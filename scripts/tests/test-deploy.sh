@@ -2,7 +2,7 @@
 # Test suite for deploy.sh — verifies setup/ playbook deployment and regressions.
 #
 # Usage:
-#   ./tests/test-deploy.sh
+#   bash scripts/tests/test-deploy.sh
 #
 # Exit codes:
 #   0  All tests passed
@@ -776,6 +776,47 @@ else
 fi
 
 rm -rf "$TC15_DIR"
+
+# ═══════════════════════════════════════════════════════════════════════
+# TC16: redeploy preserves consumer manifest configuration
+#
+# pin and checkFrequency are consumer choices, not derived state. update
+# preserves both; deploy rewrote them on every run, so a redeploy silently
+# reset a pin of "*" back to the current major line.
+# ═══════════════════════════════════════════════════════════════════════
+echo ""
+echo "=== TC16: manifest configuration is consumer-owned ==="
+
+TC16_DIR=$(mktemp -d)
+"$SCRIPTS_DIR/deploy.sh" --agents claude --overwrite "$TC16_DIR" >/dev/null 2>&1
+
+if grep -q '"pin": "1.x"' "$TC16_DIR/.context/manifest.json" \
+  && grep -q '"checkFrequency": "weekly"' "$TC16_DIR/.context/manifest.json"; then
+  pass "deploy: fresh deployment gets default pin and check frequency"
+else
+  fail "deploy: fresh deployment has unexpected pin or check frequency"
+fi
+
+# Simulate a consumer widening the pin and slowing the check.
+sed 's/"pin": "1.x"/"pin": "*"/; s/"checkFrequency": "weekly"/"checkFrequency": "monthly"/' \
+  "$TC16_DIR/.context/manifest.json" > "$TC16_DIR/.context/manifest.json.tmp"
+mv "$TC16_DIR/.context/manifest.json.tmp" "$TC16_DIR/.context/manifest.json"
+
+"$SCRIPTS_DIR/deploy.sh" --agents claude --overwrite "$TC16_DIR" >/dev/null 2>&1
+
+if grep -q '"pin": "\*"' "$TC16_DIR/.context/manifest.json"; then
+  pass "deploy: redeploy preserves a consumer-set pin"
+else
+  fail "deploy: redeploy reset the consumer-set pin"
+fi
+
+if grep -q '"checkFrequency": "monthly"' "$TC16_DIR/.context/manifest.json"; then
+  pass "deploy: redeploy preserves a consumer-set check frequency"
+else
+  fail "deploy: redeploy reset the consumer-set check frequency"
+fi
+
+rm -rf "$TC16_DIR"
 
 echo ""
 echo "=== Results ==="

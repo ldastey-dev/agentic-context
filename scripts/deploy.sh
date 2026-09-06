@@ -287,9 +287,21 @@ write_manifest() {
   local target="$1" version="$2" agents="$3"
   local manifest="$target/.context/manifest.json"
   local ctx="$target/.context"
-  local now first=1
+  local now first=1 pin freq
 
   now="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+
+  # pin and checkFrequency are consumer configuration, not derived state.
+  # Redeploying over an existing deployment must not silently undo a
+  # deliberate choice - "*" to accept majors, an exact version to freeze, or a
+  # check frequency other than weekly. update.sh and update.ps1 already
+  # preserve both; deploy has to agree or a redeploy quietly resets them.
+  if [ -f "$manifest" ]; then
+    pin="$(ac_manifest_get "$manifest" pin)"
+    freq="$(ac_manifest_get "$manifest" checkFrequency)"
+  fi
+  [ -n "${pin:-}" ] || pin="$(ac_semver_major "$version").x"
+  [ -n "${freq:-}" ] || freq="weekly"
 
   mkdir -p "$ctx"
   {
@@ -297,8 +309,8 @@ write_manifest() {
     printf '  "schema": 1,\n'
     printf '  "version": "%s",\n' "$version"
     printf '  "source": "%s",\n' "$AC_SOURCE_REPO"
-    printf '  "pin": "%s",\n' "$(ac_semver_major "$version").x"
-    printf '  "checkFrequency": "weekly",\n'
+    printf '  "pin": "%s",\n' "$pin"
+    printf '  "checkFrequency": "%s",\n' "$freq"
     printf '  "deployedAt": "%s",\n' "$now"
     printf '  "agents": ['
     for agent in $agents; do
