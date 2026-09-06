@@ -4,6 +4,18 @@ Before starting any task, scan this index for matching keywords.
 Load the referenced files into your context before proceeding.
 Combine multiple matches when a task spans domains.
 
+## Override resolution — apply to every file below
+
+Before loading any `.context/**` file, check whether `.context/overrides/<same relative
+path>` exists. If it does, that override takes precedence:
+
+- Override frontmatter `mode: replace` (or no `mode`) — load **only** the override; ignore the base file.
+- Override frontmatter `mode: extend` — load the base file first, then apply the override on top. Where they conflict, the override wins.
+
+Base files under `.context/standards/`, `.context/playbooks/` and `.context/conventions/` are
+managed by the framework and are replaced wholesale on update. Never edit them; put changes in
+`.context/overrides/` instead. See `.context/overrides/README.md`.
+
 ---
 
 ## Standards (reference — load when working in the domain)

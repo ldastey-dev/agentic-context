@@ -98,6 +98,12 @@ Infrastructure (Database / External APIs / Messaging)
 
 ---
 
+<!-- agentic-context:begin 1.0.0 -->
+<!-- Everything between these markers is managed by agentic-context and is REPLACED
+     WHOLESALE on update. Do not edit inside this block — your changes will be lost.
+     To change framework rules, add an override under .context/overrides/.
+     Everything outside these markers is yours and is never touched. -->
+
 ## Context System
 
 This repository uses on-demand context loading. Before starting any task, read `.context/index.md` and load files matching the current task's domain.
@@ -107,6 +113,21 @@ Available context types:
 - **Standards** in `.context/standards/` — detailed reference for a specific concern (security, testing, performance, etc.)
 - **Playbooks** in `.context/playbooks/` — step-by-step procedures for assessments, reviews, plans, and refactoring
 - **Conventions** in `.context/conventions/` — workflow, communication, and coding style guidance
+
+### Override Resolution
+
+Before loading any `.context/**` file, check whether `.context/overrides/<same relative path>` exists. If it does, that override takes precedence:
+
+- `mode: replace` (or no `mode`) — load **only** the override; ignore the base file.
+- `mode: extend` — load the base file first, then apply the override on top. Where they conflict, the override wins.
+
+Base files under `.context/standards/`, `.context/playbooks/` and `.context/conventions/` are framework-managed and are replaced on update. Never edit them; put changes in `.context/overrides/`. See `.context/overrides/README.md`.
+
+### Framework Updates
+
+Check frequency: **weekly**  <!-- daily | weekly | monthly | never -->
+
+At session start, if `.context/.last-update-check` is missing or older than the frequency above, run `.context/bin/update.sh --check` once. Report at most one line. **Never block the session.** If the check fails for any reason, continue silently.
 
 ---
 
@@ -162,8 +183,24 @@ The following standards are non-negotiable. Do not weaken them. Detailed guidanc
 | OpenTelemetry | Cross-language SDK patterns, OTLP protocol, backends | `.context/standards/opentelemetry.md` |
 | OpenTelemetry .NET | .NET instrumentation, pitfalls, testing patterns | `.context/standards/opentelemetry-dotnet.md` |
 
+<!-- agentic-context:end -->
+
 ---
 
 ## Project-Specific Rules [CONFIGURE]
 
 <!-- PROJECT: Rules unique to this project that don't fit the categories above. -->
+
+---
+
+## Additional Context [CONFIGURE]
+
+<!-- PROJECT: Keyword routes for any standards or playbooks you have added under
+     .context/overrides/ that the framework does not ship. Agents scan this table
+     the same way they scan .context/index.md.
+
+| Keywords | File | Summary |
+|----------|------|---------|
+| billing, invoice, dunning | `.context/overrides/standards/billing-domain.md` | Billing domain rules |
+-->
+

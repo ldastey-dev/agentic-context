@@ -165,6 +165,125 @@ copy_dir_contents() {
   done < <(find "$src" -type f -print0 | sort -z)
 }
 
+# --- managed block ---------------------------------------------------------
+#
+# The consumer owns AGENTS.md: it carries their [CONFIGURE] sections. The
+# framework owns only the region between the begin/end markers. Rewriting just
+# that region is the only safe way to refresh a file we do not own.
+
+AC_BEGIN_MARKER='<!-- agentic-context:begin'
+AC_END_MARKER='<!-- agentic-context:end -->'
+
+# Return 0 when the file contains a well-formed managed block.
+has_managed_block() {
+  local file="$1"
+  [ -f "$file" ] || return 1
+  grep -q "^$AC_BEGIN_MARKER" "$file" 2>/dev/null || return 1
+  grep -qF "$AC_END_MARKER" "$file" 2>/dev/null || return 1
+  return 0
+}
+
+# Print the managed block (markers included) from the source template.
+extract_managed_block() {
+  local file="$1"
+  awk -v b="$AC_BEGIN_MARKER" -v e="$AC_END_MARKER" '
+    index($0, b) == 1 { inblock = 1 }
+    inblock { print }
+    index($0, e) == 1 { inblock = 0 }
+  ' "$file"
+}
+
+# Replace the managed block in $dst with the one from $src, preserving
+# everything outside the markers byte for byte.
+replace_managed_block() {
+  local src="$1" dst="$2" version="$3"
+  local block_file tmp_file
+
+  block_file="$(mktemp)"
+  tmp_file="$(mktemp)"
+
+  extract_managed_block "$src" \
+    | sed "1s|^$AC_BEGIN_MARKER.*|$AC_BEGIN_MARKER $version -->|" > "$block_file"
+
+  awk -v b="$AC_BEGIN_MARKER" -v e="$AC_END_MARKER" -v blockfile="$block_file" '
+    index($0, b) == 1 {
+      inblock = 1
+      while ((getline line < blockfile) > 0) { print line }
+      close(blockfile)
+      next
+    }
+    index($0, e) == 1 && inblock { inblock = 0; next }
+    !inblock { print }
+  ' "$dst" > "$tmp_file"
+
+  cat "$tmp_file" > "$dst"
+  rm -f "$block_file" "$tmp_file"
+}
+
+# Deploy AGENTS.md safely.
+#   - absent            -> copy the template whole
+#   - has managed block -> rewrite only that block, keep the rest untouched
+#   - no managed block  -> defer to the normal overwrite prompt
+deploy_agents_md() {
+  local src="$1" dst="$2" version="$3"
+
+  if [ ! -f "$dst" ]; then
+    mkdir -p "$(dirname "$dst")"
+    sed "s|^$AC_BEGIN_MARKER.*|$AC_BEGIN_MARKER $version -->|" "$src" > "$dst"
+    return 0
+  fi
+
+  if has_managed_block "$dst"; then
+    replace_managed_block "$src" "$dst" "$version"
+    echo "    AGENTS.md: refreshed managed block (your content preserved)"
+    return 0
+  fi
+
+  copy_file "$src" "$dst"
+}
+
+# --- manifest --------------------------------------------------------------
+
+# Write .context/manifest.json describing what was deployed, so update and
+# migrate can tell pristine base files from consumer-edited ones.
+write_manifest() {
+  local target="$1" version="$2" agents="$3"
+  local manifest="$target/.context/manifest.json"
+  local ctx="$target/.context"
+  local now first=1
+
+  now="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+
+  mkdir -p "$ctx"
+  {
+    printf '{\n'
+    printf '  "schema": 1,\n'
+    printf '  "version": "%s",\n' "$version"
+    printf '  "source": "%s",\n' "$AC_SOURCE_REPO"
+    printf '  "pin": "%s",\n' "$(ac_semver_major "$version").x"
+    printf '  "checkFrequency": "weekly",\n'
+    printf '  "deployedAt": "%s",\n' "$now"
+    printf '  "agents": ['
+    for agent in $agents; do
+      if [ $first -eq 1 ]; then first=0; else printf ','; fi
+      printf '"%s"' "$agent"
+    done
+    printf '],\n'
+    printf '  "files": {\n'
+
+    first=1
+    ac_hash_context_tree "$ctx" | while IFS= read -r line; do
+      rel="${line%%  *}"
+      hash="${line##*  }"
+      if [ $first -eq 1 ]; then first=0; else printf ',\n'; fi
+      printf '    "%s": "%s"' "$rel" "$hash"
+    done
+
+    printf '\n  }\n'
+    printf '}\n'
+  } > "$manifest"
+}
+
 interactive_select_agents() {
   local options=(all "${VALID_AGENTS[@]}" "clear and exit")
   local options_count=${#options[@]}
@@ -536,11 +655,18 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # Content lives one level up: this script sits in scripts/, sources are at the repo root.
 SOURCE_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
+# shellcheck source=scripts/lib/common.sh
+. "$SCRIPT_DIR/lib/common.sh"
+
+DEPLOY_VERSION="$(ac_semver_normalise "$(cat "$SOURCE_ROOT/VERSION" 2>/dev/null || echo '0.0.0')")"
+ac_semver_is_valid "$DEPLOY_VERSION" || DEPLOY_VERSION="0.0.0"
+
 echo "Deploying agent-contexts to $TARGET"
+echo "  Version: $DEPLOY_VERSION"
 echo "  Selected agents: $(join_by ', ' "${ENABLED_AGENTS[@]}")"
 
 echo "  Copying shared context files..."
-copy_file "$SOURCE_ROOT/core/AGENTS.md" "$TARGET/AGENTS.md"
+deploy_agents_md "$SOURCE_ROOT/core/AGENTS.md" "$TARGET/AGENTS.md" "$DEPLOY_VERSION"
 copy_dir_contents "$SOURCE_ROOT/core/.context" "$TARGET/.context"
 
 if agent_enabled claude; then
@@ -636,6 +762,28 @@ else
   echo "  Skipping skill wrapper generation (no selected agent uses skills)."
 fi
 
+# Consumer-owned override tree. Created empty; never touched again by update.
+echo "  Creating override layer → $TARGET/.context/overrides/"
+mkdir -p "$TARGET/.context/overrides"
+copy_dir_contents "$SOURCE_ROOT/core/.context/overrides" "$TARGET/.context/overrides"
+
+# Update tooling, shipped into the target so it can maintain itself.
+echo "  Installing update tooling → $TARGET/.context/bin/"
+mkdir -p "$TARGET/.context/bin"
+for tool in update.sh update.ps1 migrate.sh migrate.ps1; do
+  if [[ -f "$SOURCE_ROOT/scripts/$tool" ]]; then
+    cp "$SOURCE_ROOT/scripts/$tool" "$TARGET/.context/bin/$tool"
+  fi
+done
+mkdir -p "$TARGET/.context/bin/lib"
+cp "$SOURCE_ROOT/scripts/lib/common.sh" "$TARGET/.context/bin/lib/common.sh"
+chmod +x "$TARGET/.context/bin"/*.sh 2>/dev/null || true
+
+printf '%s\n' "$DEPLOY_VERSION" > "$TARGET/.context/VERSION"
+
+echo "  Writing manifest → $TARGET/.context/manifest.json"
+write_manifest "$TARGET" "$DEPLOY_VERSION" "${ENABLED_AGENTS[*]}"
+
 echo ""
 echo "Done. Next steps:"
 step=1
@@ -653,6 +801,17 @@ fi
 
 if agent_enabled copilot; then
   next_step "Review $TARGET/.github/copilot-instructions.md"
+fi
+
+next_step "Never edit .context/standards|playbooks|conventions directly — use .context/overrides/ (see .context/overrides/README.md)"
+
+# Report staleness on every deploy. Fails open and never blocks.
+if latest="$(ac_fetch_latest_version "$AC_SOURCE_REPO" 2>/dev/null)" && [[ -n "$latest" ]]; then
+  if ac_semver_gt "$latest" "$DEPLOY_VERSION"; then
+    echo ""
+    echo "  Note: you deployed $DEPLOY_VERSION but $latest is available upstream."
+    echo "        Pull the latest agentic-context and re-run this script."
+  fi
 fi
 
 if [[ ${#SKIPPED_FILES[@]} -gt 0 ]]; then
