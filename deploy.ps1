@@ -604,6 +604,7 @@ if ((Test-AgentEnabled 'claude') -or (Test-AgentEnabled 'copilot')) {
         @{ Dir = 'review';   Tools = 'Read, Grep, Glob, Bash(git *)' }
         @{ Dir = 'plan';     Tools = $null }
         @{ Dir = 'refactor'; Tools = $null }
+        @{ Dir = 'debug';    Tools = 'Read, Grep, Glob, Bash, Write, Edit, Agent' }
         @{ Dir = 'docs';     Tools = $null }
         @{ Dir = 'setup';    Tools = 'Read, Grep, Glob, Bash, Write, Edit, Agent' }
     )
