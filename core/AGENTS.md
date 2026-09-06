@@ -127,7 +127,9 @@ Base files under `.context/standards/`, `.context/playbooks/` and `.context/conv
 
 Check frequency: **weekly**  <!-- daily | weekly | monthly | never -->
 
-At session start, if `.context/.last-update-check` is missing or older than the frequency above, run `.context/bin/update.sh --check` once. Report at most one line. **Never block the session.** If the check fails for any reason, continue silently.
+At session start, if `.context/.last-update-check` is missing or older than the frequency above, run `.context/bin/update.sh --check --quiet` once. Report at most one line. **Never block the session.** If the check fails for any reason, continue silently.
+
+`--quiet` is what keeps this cheap: it prints a line only when an update is actually available, and otherwise exits without hashing the context tree. Run it without `--quiet` yourself, at any time, to also see which base files have been edited locally.
 
 ---
 

@@ -307,16 +307,24 @@ carries `.context/manifest.json` recording the version it is on, and
 `.context/bin/` with the tooling to check and apply updates.
 
 ```bash
-.context/bin/update.sh --status   # local state only, no network
-.context/bin/update.sh --check    # is there a newer version?
-.context/bin/update.sh --apply    # refresh the base to the latest
+.context/bin/update.sh --status          # local state only, no network
+.context/bin/update.sh --check           # is there a newer version?
+.context/bin/update.sh --check --quiet   # as above, but silent unless action is needed
+.context/bin/update.sh --apply           # refresh the base to the latest
 ```
 
 ```powershell
 .context/bin/update.ps1 -Status
 .context/bin/update.ps1 -Check
+.context/bin/update.ps1 -Check -Quiet
 .context/bin/update.ps1 -Apply
 ```
+
+`--check` also reports which base files have been edited locally, which means
+hashing the context tree. `--quiet` skips that scan and prints only when an
+update is actually available, so it costs a single HTTP request and nothing
+else. That is why it is what agents are told to run at session start, and why
+`--check` on its own is the better command to run yourself.
 
 The check costs a single fetch of a six-byte `VERSION` file from a CDN-cached
 URL — no authentication, no rate limit, and nothing meaningful added to an agent
