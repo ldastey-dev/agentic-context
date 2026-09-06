@@ -32,10 +32,10 @@ Describe 'deploy.ps1 (PowerShell version/platform compatibility)' {
     # isn't installed locally; run `Install-Module PSScriptAnalyzer -Scope CurrentUser` to enable
     # it. This is a static check - it does not catch semantic/runtime issues like Add-Type
     # resetting [Environment]::CurrentDirectory, which is why the compatibility test above and
-    # TC5 in tests/test-deploy.ps1 exist separately.
+    # TC5 in scripts/tests/test-deploy.ps1 exist separately.
     It 'has no PSScriptAnalyzer compatibility findings for Windows PowerShell 5.1 / PowerShell 7.0' -Skip:(-not $script:PSScriptAnalyzerAvailable) {
         Import-Module PSScriptAnalyzer
-        $results = Invoke-ScriptAnalyzer -Path (Join-Path $PSScriptRoot 'deploy.ps1') -Settings (Join-Path $PSScriptRoot 'PSScriptAnalyzerSettings.psd1')
+        $results = Invoke-ScriptAnalyzer -Path (Join-Path $PSScriptRoot 'deploy.ps1') -Settings (Join-Path (Split-Path -Parent $PSScriptRoot) 'PSScriptAnalyzerSettings.psd1')
         $results | Should -BeNullOrEmpty
     }
 }

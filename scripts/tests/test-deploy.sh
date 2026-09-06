@@ -11,7 +11,8 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-REPO_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+REPO_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
+SCRIPTS_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 # Detect whether the source filesystem supports permission differentiation.
 # On WSL2-mounted Windows filesystems, all files are rwxrwxrwx regardless
@@ -144,7 +145,7 @@ assert_files_identical() {
 echo ""
 echo "=== TC1: Fresh deploy — all agents ==="
 TC1_DIR=$(mktemp -d)
-"$REPO_DIR/deploy.sh" --agents all --overwrite "$TC1_DIR" >/dev/null 2>&1
+"$SCRIPTS_DIR/deploy.sh" --agents all --overwrite "$TC1_DIR" >/dev/null 2>&1
 
 echo "  --- Playbook files ---"
 assert_file_exists "create-local-otel-stack.md" "$TC1_DIR/.context/playbooks/setup/create-local-otel-stack.md"
@@ -223,7 +224,7 @@ rm -rf "$TC1_DIR"
 echo ""
 echo "=== TC2: Agent-scoped deploy — Claude only ==="
 TC2_DIR=$(mktemp -d)
-"$REPO_DIR/deploy.sh" --agents claude --overwrite "$TC2_DIR" >/dev/null 2>&1
+"$SCRIPTS_DIR/deploy.sh" --agents claude --overwrite "$TC2_DIR" >/dev/null 2>&1
 
 assert_file_exists "claude wrapper present" "$TC2_DIR/.claude/skills/setup-create-local-otel-stack/SKILL.md"
 assert_dir_not_exists "copilot dir absent" "$TC2_DIR/.github/skills/setup-create-local-otel-stack"
@@ -236,7 +237,7 @@ rm -rf "$TC2_DIR"
 echo ""
 echo "=== TC3: Agent-scoped deploy — Copilot only ==="
 TC3_DIR=$(mktemp -d)
-"$REPO_DIR/deploy.sh" --agents copilot --overwrite "$TC3_DIR" >/dev/null 2>&1
+"$SCRIPTS_DIR/deploy.sh" --agents copilot --overwrite "$TC3_DIR" >/dev/null 2>&1
 
 assert_file_exists "copilot wrapper present" "$TC3_DIR/.github/skills/setup-create-local-otel-stack/SKILL.md"
 assert_dir_not_exists "claude dir absent" "$TC3_DIR/.claude/skills/setup-create-local-otel-stack"
@@ -249,7 +250,7 @@ rm -rf "$TC3_DIR"
 echo ""
 echo "=== TC4: No regressions — existing thin wrappers ==="
 TC4_DIR=$(mktemp -d)
-"$REPO_DIR/deploy.sh" --agents claude --overwrite "$TC4_DIR" >/dev/null 2>&1
+"$SCRIPTS_DIR/deploy.sh" --agents claude --overwrite "$TC4_DIR" >/dev/null 2>&1
 
 assert_file_exists "assess-observability" "$TC4_DIR/.claude/skills/assess-observability/SKILL.md"
 assert_file_exists "review-security" "$TC4_DIR/.claude/skills/review-security/SKILL.md"
@@ -274,11 +275,11 @@ TC5_CHECKSUMS2=$(mktemp)
 TC5_PERMS1=$(mktemp)
 TC5_PERMS2=$(mktemp)
 
-"$REPO_DIR/deploy.sh" --agents all --overwrite "$TC5_DIR" >/dev/null 2>&1
+"$SCRIPTS_DIR/deploy.sh" --agents all --overwrite "$TC5_DIR" >/dev/null 2>&1
 checksum_tree "$TC5_DIR" > "$TC5_CHECKSUMS1"
 list_executables "$TC5_DIR" > "$TC5_PERMS1"
 
-"$REPO_DIR/deploy.sh" --agents all --overwrite "$TC5_DIR" >/dev/null 2>&1
+"$SCRIPTS_DIR/deploy.sh" --agents all --overwrite "$TC5_DIR" >/dev/null 2>&1
 checksum_tree "$TC5_DIR" > "$TC5_CHECKSUMS2"
 list_executables "$TC5_DIR" > "$TC5_PERMS2"
 
@@ -304,7 +305,7 @@ rm -rf "$TC5_DIR" "$TC5_CHECKSUMS1" "$TC5_CHECKSUMS2" "$TC5_PERMS1" "$TC5_PERMS2
 echo ""
 echo "=== TC6: validate-config passes ==="
 TC6_DIR=$(mktemp -d)
-"$REPO_DIR/deploy.sh" --agents all --overwrite "$TC6_DIR" >/dev/null 2>&1
+"$SCRIPTS_DIR/deploy.sh" --agents all --overwrite "$TC6_DIR" >/dev/null 2>&1
 
 if "$TC6_DIR/.context/playbooks/setup/create-local-otel-stack/validate-config.sh" >/dev/null 2>&1; then
   pass "Deployed validate-config.sh exits 0"

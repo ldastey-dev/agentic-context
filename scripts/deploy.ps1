@@ -547,46 +547,47 @@ if (-not (Test-Path $script:Target -PathType Container)) {
     }
 }
 
-$ScriptDir = $PSScriptRoot
+# Content lives one level up: this script sits in scripts/, sources are at the repo root.
+$SourceRoot = Split-Path -Parent $PSScriptRoot
 
 Write-Host "Deploying agent-contexts to $($script:Target)"
 Write-Host "  Selected agents: $($script:EnabledAgents -join ', ')"
 
 Write-Host "  Copying shared context files..."
-Copy-SingleFile -Source (Join-Path $ScriptDir 'core/AGENTS.md') -Destination (Join-Path $script:Target 'AGENTS.md')
-Copy-DirectoryContents -Source (Join-Path $ScriptDir 'core/.context') -Destination (Join-Path $script:Target '.context')
+Copy-SingleFile -Source (Join-Path $SourceRoot 'core/AGENTS.md') -Destination (Join-Path $script:Target 'AGENTS.md')
+Copy-DirectoryContents -Source (Join-Path $SourceRoot 'core/.context') -Destination (Join-Path $script:Target '.context')
 
 if (Test-AgentEnabled 'claude') {
     Write-Host "  Copying Claude Code files..."
-    Copy-SingleFile -Source (Join-Path $ScriptDir 'core/CLAUDE.md') -Destination (Join-Path $script:Target 'CLAUDE.md')
-    Copy-SingleFile -Source (Join-Path $ScriptDir 'core/.claude/settings.json') -Destination (Join-Path $script:Target '.claude/settings.json')
+    Copy-SingleFile -Source (Join-Path $SourceRoot 'core/CLAUDE.md') -Destination (Join-Path $script:Target 'CLAUDE.md')
+    Copy-SingleFile -Source (Join-Path $SourceRoot 'core/.claude/settings.json') -Destination (Join-Path $script:Target '.claude/settings.json')
 }
 
 if (Test-AgentEnabled 'copilot') {
     Write-Host "  Copying GitHub Copilot files..."
-    Copy-SingleFile -Source (Join-Path $ScriptDir 'core/.github/copilot-instructions.md') -Destination (Join-Path $script:Target '.github/copilot-instructions.md')
+    Copy-SingleFile -Source (Join-Path $SourceRoot 'core/.github/copilot-instructions.md') -Destination (Join-Path $script:Target '.github/copilot-instructions.md')
 }
 
 if (Test-AgentEnabled 'cursor') {
     Write-Host "  Copying Cursor files..."
-    Copy-SingleFile -Source (Join-Path $ScriptDir 'core/.cursor/rules/standards.mdc') -Destination (Join-Path $script:Target '.cursor/rules/standards.mdc')
+    Copy-SingleFile -Source (Join-Path $SourceRoot 'core/.cursor/rules/standards.mdc') -Destination (Join-Path $script:Target '.cursor/rules/standards.mdc')
 }
 
 if (Test-AgentEnabled 'devin') {
     Write-Host "  Copying Devin files..."
-    Copy-SingleFile -Source (Join-Path $ScriptDir 'core/.devin/devin.json') -Destination (Join-Path $script:Target '.devin/devin.json')
+    Copy-SingleFile -Source (Join-Path $SourceRoot 'core/.devin/devin.json') -Destination (Join-Path $script:Target '.devin/devin.json')
 }
 
 if (Test-AgentEnabled 'windsurf') {
     Write-Host "  Copying Windsurf files..."
-    Copy-SingleFile -Source (Join-Path $ScriptDir 'core/.windsurfrules') -Destination (Join-Path $script:Target '.windsurfrules')
+    Copy-SingleFile -Source (Join-Path $SourceRoot 'core/.windsurfrules') -Destination (Join-Path $script:Target '.windsurfrules')
 }
 
 Write-Host "  Copying standards\ -> $($script:Target)\.context\standards\"
-Copy-DirectoryContents -Source (Join-Path $ScriptDir 'standards') -Destination (Join-Path $script:Target '.context/standards')
+Copy-DirectoryContents -Source (Join-Path $SourceRoot 'standards') -Destination (Join-Path $script:Target '.context/standards')
 
 Write-Host "  Copying playbooks\ -> $($script:Target)\.context\playbooks\"
-Copy-DirectoryContents -Source (Join-Path $ScriptDir 'playbooks') -Destination (Join-Path $script:Target '.context/playbooks')
+Copy-DirectoryContents -Source (Join-Path $SourceRoot 'playbooks') -Destination (Join-Path $script:Target '.context/playbooks')
 
 if ((Test-AgentEnabled 'claude') -or (Test-AgentEnabled 'copilot')) {
     Write-Host "  Generating skill wrappers from playbooks..."
@@ -610,7 +611,7 @@ if ((Test-AgentEnabled 'claude') -or (Test-AgentEnabled 'copilot')) {
     )
 
     foreach ($category in $playbookCategories) {
-        $dir = Join-Path $ScriptDir "playbooks/$($category.Dir)"
+        $dir = Join-Path $SourceRoot "playbooks/$($category.Dir)"
         if (Test-Path $dir) {
             $playbooks = Get-ChildItem -Path $dir -Filter '*.md' -File -ErrorAction SilentlyContinue
             foreach ($playbook in $playbooks) {

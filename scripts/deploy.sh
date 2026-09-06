@@ -533,45 +533,47 @@ if [[ ! -d "$TARGET" ]]; then
 fi
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# Content lives one level up: this script sits in scripts/, sources are at the repo root.
+SOURCE_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 echo "Deploying agent-contexts to $TARGET"
 echo "  Selected agents: $(join_by ', ' "${ENABLED_AGENTS[@]}")"
 
 echo "  Copying shared context files..."
-copy_file "$SCRIPT_DIR/core/AGENTS.md" "$TARGET/AGENTS.md"
-copy_dir_contents "$SCRIPT_DIR/core/.context" "$TARGET/.context"
+copy_file "$SOURCE_ROOT/core/AGENTS.md" "$TARGET/AGENTS.md"
+copy_dir_contents "$SOURCE_ROOT/core/.context" "$TARGET/.context"
 
 if agent_enabled claude; then
   echo "  Copying Claude Code files..."
-  copy_file "$SCRIPT_DIR/core/CLAUDE.md" "$TARGET/CLAUDE.md"
-  copy_file "$SCRIPT_DIR/core/.claude/settings.json" "$TARGET/.claude/settings.json"
+  copy_file "$SOURCE_ROOT/core/CLAUDE.md" "$TARGET/CLAUDE.md"
+  copy_file "$SOURCE_ROOT/core/.claude/settings.json" "$TARGET/.claude/settings.json"
 fi
 
 if agent_enabled copilot; then
   echo "  Copying GitHub Copilot files..."
-  copy_file "$SCRIPT_DIR/core/.github/copilot-instructions.md" "$TARGET/.github/copilot-instructions.md"
+  copy_file "$SOURCE_ROOT/core/.github/copilot-instructions.md" "$TARGET/.github/copilot-instructions.md"
 fi
 
 if agent_enabled cursor; then
   echo "  Copying Cursor files..."
-  copy_file "$SCRIPT_DIR/core/.cursor/rules/standards.mdc" "$TARGET/.cursor/rules/standards.mdc"
+  copy_file "$SOURCE_ROOT/core/.cursor/rules/standards.mdc" "$TARGET/.cursor/rules/standards.mdc"
 fi
 
 if agent_enabled devin; then
   echo "  Copying Devin files..."
-  copy_file "$SCRIPT_DIR/core/.devin/devin.json" "$TARGET/.devin/devin.json"
+  copy_file "$SOURCE_ROOT/core/.devin/devin.json" "$TARGET/.devin/devin.json"
 fi
 
 if agent_enabled windsurf; then
   echo "  Copying Windsurf files..."
-  copy_file "$SCRIPT_DIR/core/.windsurfrules" "$TARGET/.windsurfrules"
+  copy_file "$SOURCE_ROOT/core/.windsurfrules" "$TARGET/.windsurfrules"
 fi
 
 echo "  Copying standards/ → $TARGET/.context/standards/"
-copy_dir_contents "$SCRIPT_DIR/standards" "$TARGET/.context/standards"
+copy_dir_contents "$SOURCE_ROOT/standards" "$TARGET/.context/standards"
 
 echo "  Copying playbooks/ → $TARGET/.context/playbooks/"
-copy_dir_contents "$SCRIPT_DIR/playbooks" "$TARGET/.context/playbooks"
+copy_dir_contents "$SOURCE_ROOT/playbooks" "$TARGET/.context/playbooks"
 
 if agent_enabled claude || agent_enabled copilot; then
   echo "  Generating skill wrappers from playbooks..."
@@ -584,29 +586,29 @@ if agent_enabled claude || agent_enabled copilot; then
     mkdir -p "$TARGET/.github/skills"
   fi
 
-  for playbook in "$SCRIPT_DIR"/playbooks/assess/*.md; do
+  for playbook in "$SOURCE_ROOT"/playbooks/assess/*.md; do
     filename=$(basename "$playbook")
     generate_skills_for_selected_agents "$playbook" "assess/$filename"
   done
 
-  for playbook in "$SCRIPT_DIR"/playbooks/review/*.md; do
+  for playbook in "$SOURCE_ROOT"/playbooks/review/*.md; do
     filename=$(basename "$playbook")
     # Review playbooks get read-only tools for Claude Code
     generate_skills_for_selected_agents "$playbook" "review/$filename" "Read, Grep, Glob, Bash(git *)"
   done
 
-  for playbook in "$SCRIPT_DIR"/playbooks/plan/*.md; do
+  for playbook in "$SOURCE_ROOT"/playbooks/plan/*.md; do
     filename=$(basename "$playbook")
     generate_skills_for_selected_agents "$playbook" "plan/$filename"
   done
 
-  for playbook in "$SCRIPT_DIR"/playbooks/refactor/*.md; do
+  for playbook in "$SOURCE_ROOT"/playbooks/refactor/*.md; do
     filename=$(basename "$playbook")
     generate_skills_for_selected_agents "$playbook" "refactor/$filename"
   done
 
-  if [[ -d "$SCRIPT_DIR/playbooks/debug" ]]; then
-    for playbook in "$SCRIPT_DIR"/playbooks/debug/*.md; do
+  if [[ -d "$SOURCE_ROOT/playbooks/debug" ]]; then
+    for playbook in "$SOURCE_ROOT"/playbooks/debug/*.md; do
       [[ -f "$playbook" ]] || continue
       filename=$(basename "$playbook")
       generate_skills_for_selected_agents "$playbook" "debug/$filename" \
@@ -614,16 +616,16 @@ if agent_enabled claude || agent_enabled copilot; then
     done
   fi
 
-  if [[ -d "$SCRIPT_DIR/playbooks/docs" ]]; then
-    for playbook in "$SCRIPT_DIR"/playbooks/docs/*.md; do
+  if [[ -d "$SOURCE_ROOT/playbooks/docs" ]]; then
+    for playbook in "$SOURCE_ROOT"/playbooks/docs/*.md; do
       [[ -f "$playbook" ]] || continue
       filename=$(basename "$playbook")
       generate_skills_for_selected_agents "$playbook" "docs/$filename"
     done
   fi
 
-  if [[ -d "$SCRIPT_DIR/playbooks/setup" ]]; then
-    for playbook in "$SCRIPT_DIR"/playbooks/setup/*.md; do
+  if [[ -d "$SOURCE_ROOT/playbooks/setup" ]]; then
+    for playbook in "$SOURCE_ROOT"/playbooks/setup/*.md; do
       [[ -f "$playbook" ]] || continue
       filename=$(basename "$playbook")
       generate_skills_for_selected_agents "$playbook" "setup/$filename" \

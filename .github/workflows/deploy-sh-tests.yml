@@ -81,19 +81,19 @@ jobs:
           echo "/bin/bash:    $(/bin/bash --version | head -1)"
 
       - name: Run end-to-end deploy tests
-        run: bash tests/test-deploy.sh
+        run: bash scripts/tests/test-deploy.sh
 
       # macOS ships bash 3.2 as /bin/bash and deploy.sh declares #!/bin/bash,
       # so consumers on macOS run it under 3.2. Assert that explicitly instead of
       # relying on whichever bash happens to be first on PATH.
       - name: Run end-to-end deploy tests under /bin/bash
         if: runner.os == 'macOS'
-        run: /bin/bash tests/test-deploy.sh
+        run: /bin/bash scripts/tests/test-deploy.sh
 
       - name: Verify deploy.sh runs from an arbitrary working directory
         run: |
           target="$(mktemp -d)"
           cd "$(mktemp -d)"
-          "$GITHUB_WORKSPACE/deploy.sh" --agents all --overwrite "$target"
+          "$GITHUB_WORKSPACE/scripts/deploy.sh" --agents all --overwrite "$target"
           test -f "$target/AGENTS.md"
           test -f "$target/.context/index.md"

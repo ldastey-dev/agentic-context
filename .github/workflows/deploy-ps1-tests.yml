@@ -56,7 +56,7 @@ jobs:
         run: |
           $ErrorActionPreference = 'Stop'
           Import-Module PSScriptAnalyzer
-          $results = Invoke-ScriptAnalyzer -Path ./deploy.ps1 -Settings ./PSScriptAnalyzerSettings.psd1
+          $results = Invoke-ScriptAnalyzer -Path ./scripts/deploy.ps1 -Settings ./PSScriptAnalyzerSettings.psd1
           if ($results) {
               $results | Format-Table -AutoSize | Out-String | Write-Host
               throw "PSScriptAnalyzer reported $($results.Count) compatibility finding(s)."
@@ -110,7 +110,7 @@ jobs:
           }
 
       - name: Run Pester unit tests
-        run: Invoke-Pester -Path ./deploy.Tests.ps1 -CI
+        run: Invoke-Pester -Path ./scripts/deploy.Tests.ps1 -CI
 
       - name: Run end-to-end deploy tests
-        run: pwsh ./tests/test-deploy.ps1
+        run: pwsh ./scripts/tests/test-deploy.ps1

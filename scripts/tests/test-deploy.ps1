@@ -11,7 +11,8 @@
 $ErrorActionPreference = "Stop"
 
 $ScriptDir = Split-Path -Parent $PSCommandPath
-$RepoDir = Split-Path -Parent $ScriptDir
+$RepoDir = Split-Path -Parent (Split-Path -Parent $ScriptDir)
+$ScriptsDir = Split-Path -Parent $ScriptDir
 
 $script:Passed = 0
 $script:Failed = 0
@@ -109,7 +110,7 @@ Write-Host ""
 Write-Host "=== TC1: Fresh deploy — all agents ==="
 $tc1Dir = Join-Path ([System.IO.Path]::GetTempPath()) "tc1-$([guid]::NewGuid().ToString('N').Substring(0,8))"
 New-Item -ItemType Directory -Path $tc1Dir -Force | Out-Null
-& "$RepoDir/deploy.ps1" -Agents all -Overwrite -Target $tc1Dir *>$null
+& "$ScriptsDir/deploy.ps1" -Agents all -Overwrite -Target $tc1Dir *>$null
 
 Write-Host "  --- Playbook files ---"
 Assert-FileExists "create-local-otel-stack.md" "$tc1Dir/.context/playbooks/setup/create-local-otel-stack.md"
@@ -179,7 +180,7 @@ Write-Host ""
 Write-Host "=== TC2: Agent-scoped deploy — Claude only ==="
 $tc2Dir = Join-Path ([System.IO.Path]::GetTempPath()) "tc2-$([guid]::NewGuid().ToString('N').Substring(0,8))"
 New-Item -ItemType Directory -Path $tc2Dir -Force | Out-Null
-& "$RepoDir/deploy.ps1" -Agents claude -Overwrite -Target $tc2Dir *>$null
+& "$ScriptsDir/deploy.ps1" -Agents claude -Overwrite -Target $tc2Dir *>$null
 
 Assert-FileExists "claude wrapper present" "$tc2Dir/.claude/skills/setup-create-local-otel-stack/SKILL.md"
 Assert-DirNotExists "copilot dir absent" "$tc2Dir/.github/skills/setup-create-local-otel-stack"
@@ -193,7 +194,7 @@ Write-Host ""
 Write-Host "=== TC3: Agent-scoped deploy — Copilot only ==="
 $tc3Dir = Join-Path ([System.IO.Path]::GetTempPath()) "tc3-$([guid]::NewGuid().ToString('N').Substring(0,8))"
 New-Item -ItemType Directory -Path $tc3Dir -Force | Out-Null
-& "$RepoDir/deploy.ps1" -Agents copilot -Overwrite -Target $tc3Dir *>$null
+& "$ScriptsDir/deploy.ps1" -Agents copilot -Overwrite -Target $tc3Dir *>$null
 
 Assert-FileExists "copilot wrapper present" "$tc3Dir/.github/skills/setup-create-local-otel-stack/SKILL.md"
 Assert-DirNotExists "claude dir absent" "$tc3Dir/.claude/skills/setup-create-local-otel-stack"
@@ -207,7 +208,7 @@ Write-Host ""
 Write-Host "=== TC4: No regressions — existing thin wrappers ==="
 $tc4Dir = Join-Path ([System.IO.Path]::GetTempPath()) "tc4-$([guid]::NewGuid().ToString('N').Substring(0,8))"
 New-Item -ItemType Directory -Path $tc4Dir -Force | Out-Null
-& "$RepoDir/deploy.ps1" -Agents claude -Overwrite -Target $tc4Dir *>$null
+& "$ScriptsDir/deploy.ps1" -Agents claude -Overwrite -Target $tc4Dir *>$null
 
 Assert-FileExists "assess-observability" "$tc4Dir/.claude/skills/assess-observability/SKILL.md"
 
@@ -235,7 +236,7 @@ $originalCurrentDirectory = [Environment]::CurrentDirectory
 try {
     Set-Location $tc5Launch
     [Environment]::CurrentDirectory = $tc5Corrupt
-    & "$RepoDir/deploy.ps1" -Agents claude -Overwrite -Target "../reltarget" *>$null
+    & "$ScriptsDir/deploy.ps1" -Agents claude -Overwrite -Target "../reltarget" *>$null
 } finally {
     Set-Location $originalCwd
     [Environment]::CurrentDirectory = $originalCurrentDirectory
