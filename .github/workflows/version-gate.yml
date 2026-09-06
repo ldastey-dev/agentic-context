@@ -34,7 +34,12 @@ jobs:
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
           set -euo pipefail
-          git diff --name-only "$BASE_SHA" "$HEAD_SHA" > /tmp/changed-files.txt
+          # Three-dot: compare against the merge base, not the tip of main.
+          # Two-dot would attribute commits that landed on main while this pull
+          # request was open - a release commit bumping VERSION, say - to this
+          # pull request, producing a false "hand-edit to a CI-owned file"
+          # rejection and a wrong changed-file set for the version computation.
+          git diff --name-only "$BASE_SHA...$HEAD_SHA" > /tmp/changed-files.txt
           echo "Changed files:"
           sed 's/^/  /' /tmp/changed-files.txt
 
@@ -65,12 +70,18 @@ jobs:
           fi
 
           # Baselines are published per release so migrate can tell a pristine
-          # file from an edited one. A hand-written baseline would silently
-          # corrupt every future migration, so once any baseline exists only
-          # the release job may add or change one.
-          if grep -q '^scripts/baselines/' /tmp/changed-files.txt; then
+          # file from an edited one. A hand-written per-release baseline would
+          # silently corrupt every future migration, so once any baseline
+          # exists only the release job may add or change one.
+          #
+          # scripts/baselines/unversioned.sha256 is the documented exception:
+          # it records the pre-versioning content that adopters actually
+          # deployed, CI can never write it (write-baseline.sh takes only valid
+          # SemVer), and migrate correctness depends on it being correctable.
+          if grep '^scripts/baselines/' /tmp/changed-files.txt \
+            | grep -qv '^scripts/baselines/unversioned\.sha256$'; then
             if git ls-tree -r --name-only "$BASE_SHA" -- scripts/baselines | grep -q .; then
-              echo "::error::scripts/baselines/ is published by the release workflow. Do not add or edit baseline files by hand."
+              echo "::error::scripts/baselines/<version>.sha256 is published by the release workflow. Do not add or edit per-release baseline files by hand."
               fail=1
             fi
           fi
@@ -79,6 +90,26 @@ jobs:
             echo "OK: no hand-edits to CI-owned files."
           fi
           exit "$fail"
+
+      - name: Require the breaking-change marker in the title
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: |
+          set -euo pipefail
+          # The release job reads BREAKING CHANGE from the full commit message,
+          # but this gate only ever sees the pull request title. A body that
+          # declares a breaking change while the title omits "!" would compute
+          # one version here and a different one on merge, and would ship a
+          # breaking change to consumers who pinned a major line precisely so
+          # that cannot happen. Require the marker in the title instead.
+          if printf '%s' "$PR_BODY" | grep -Eq '(^|[^[:alnum:]])BREAKING[ -]CHANGE'; then
+            if ! printf '%s' "$PR_TITLE" | grep -Eq '^[a-zA-Z]+(\([^)]*\))?!:'; then
+              echo "::error::The description declares a BREAKING CHANGE but the title has no '!' marker. Retitle as 'type!: ...' so the release cuts a major."
+              exit 1
+            fi
+          fi
+          echo "OK: breaking-change marking is consistent."
 
       - name: Compute the version this merge will cut
         id: next

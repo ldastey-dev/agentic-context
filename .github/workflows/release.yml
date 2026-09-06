@@ -57,9 +57,32 @@ jobs:
         run: |
           set -euo pipefail
           subject="$(git log -1 --pretty=format:'%s')"
+          # Pass the whole message, not just the subject: Conventional Commits
+          # puts BREAKING CHANGE in the footer, so a subject-only read ships a
+          # breaking change as a patch to consumers pinned to a major line.
+          git log -1 --pretty=format:'%B' > /tmp/commit-body.txt
           current="$(tr -d ' \t\r\n' < VERSION)"
           prev_tag="$(git tag --list 'v*' --sort=-v:refname | head -n 1 || true)"
-          next="$(scripts/ci/next-version.sh --changed-files /tmp/changed-files.txt --subject "$subject" --latest-tag "$prev_tag")"
+
+          # The bump size is read from the merge subject, which equals the PR
+          # title only under squash-merge. Under a merge commit the subject is
+          # "Merge pull request #..." and under rebase-merge it is the last
+          # commit's subject, so pr-title.yml would be validating a string that
+          # never reaches this job. Warn loudly rather than silently defaulting
+          # to a patch, which would understate a feat or a breaking change.
+          if ! printf '%s' "$subject" | grep -Eq '^[a-zA-Z]+(\([^)]*\))?!?:'; then
+            echo "::warning::Merge subject '$subject' is not a Conventional Commit. \
+          The repository must use squash-merge so the PR title becomes the merge subject; \
+          falling back to the patch floor."
+            {
+              echo "> **Merge subject is not a Conventional Commit.**"
+              echo "> \`$subject\`"
+              echo ">"
+              echo "> Bump size fell back to the patch floor. Enable squash-merge only."
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+          next="$(scripts/ci/next-version.sh --changed-files /tmp/changed-files.txt --subject "$subject" --body-file /tmp/commit-body.txt --latest-tag "$prev_tag")"
           echo "current=$current" >> "$GITHUB_OUTPUT"
           echo "next=$next" >> "$GITHUB_OUTPUT"
           echo "prev_tag=$prev_tag" >> "$GITHUB_OUTPUT"

@@ -171,17 +171,8 @@ copy_dir_contents() {
 # framework owns only the region between the begin/end markers. Rewriting just
 # that region is the only safe way to refresh a file we do not own.
 
-AC_BEGIN_MARKER='<!-- agentic-context:begin'
-AC_END_MARKER='<!-- agentic-context:end -->'
-
-# Return 0 when the file contains a well-formed managed block.
-has_managed_block() {
-  local file="$1"
-  [ -f "$file" ] || return 1
-  grep -q "^$AC_BEGIN_MARKER" "$file" 2>/dev/null || return 1
-  grep -qF "$AC_END_MARKER" "$file" 2>/dev/null || return 1
-  return 0
-}
+# The markers and the well-formed-block test live in scripts/lib/common.sh so
+# deploy and update cannot disagree about what counts as a managed block.
 
 # Print the managed block (markers included) from the source template.
 extract_managed_block() {
@@ -233,7 +224,7 @@ deploy_agents_md() {
     return 0
   fi
 
-  if has_managed_block "$dst"; then
+  if ac_has_managed_block "$dst"; then
     replace_managed_block "$src" "$dst" "$version"
     echo "    AGENTS.md: refreshed managed block (your content preserved)"
     return 0

@@ -12,7 +12,11 @@
 #
 # Portability: macOS bash 3.2 with BSD userland, and Linux with GNU userland.
 
-set -uo pipefail
+# Exit on first error. This script rewrites files in a repository it did not
+# create, so a failed copy must stop the run rather than let it complete with a
+# partially migrated tree. Unlike update.sh there is no network call here, so
+# there is nothing that needs to fail open.
+set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
@@ -119,14 +123,18 @@ echo ""
 
 DIVERGED_LIST="$(mktemp)"
 MISSING_LIST="$(mktemp)"
-cleanup() { rm -f "$DIVERGED_LIST" "$MISSING_LIST"; }
+TOTAL_LIST="$(mktemp)"
+NONMD_LIST="$(mktemp)"
+cleanup() { rm -f "$DIVERGED_LIST" "$MISSING_LIST" "$TOTAL_LIST" "$NONMD_LIST"; }
 trap cleanup EXIT INT TERM
 
 for area in standards playbooks conventions; do
   [ -d "$CONTEXT_DIR/$area" ] || continue
   find "$CONTEXT_DIR/$area" -type f -name '*.md' 2>/dev/null | LC_ALL=C sort | while IFS= read -r f; do
     rel="$area/${f#"$CONTEXT_DIR"/"$area"/}"
-    actual="$(ac_sha256 "$f")"
+    printf '%s\n' "$rel" >> "$TOTAL_LIST"
+    # LF-normalised: a CRLF checkout must not make every file look edited.
+    actual="$(ac_sha256_lf "$f")"
     if expected="$(ac_baseline_lookup "$BASELINE" "$rel")"; then
       if [ "$expected" != "$actual" ]; then
         printf '%s\n' "$rel" >> "$DIVERGED_LIST"
@@ -138,10 +146,40 @@ for area in standards playbooks conventions; do
   done
 done
 
+# Non-markdown files. The baseline only covers .md, but the restore below
+# replaces each area wholesale, so anything else here is destroyed unless it is
+# recognised. A file that also exists in the source tree is a framework
+# companion (playbooks/setup ships shell scripts) and is restored intact; one
+# that does not is the consumer's own and must be preserved as an override.
+for pair in "standards:$SOURCE_ROOT/standards" "playbooks:$SOURCE_ROOT/playbooks" "conventions:$SOURCE_ROOT/core/.context/conventions"; do
+  area="${pair%%:*}"
+  from="${pair#*:}"
+  [ -d "$CONTEXT_DIR/$area" ] || continue
+  find "$CONTEXT_DIR/$area" -type f ! -name '*.md' 2>/dev/null | LC_ALL=C sort | while IFS= read -r f; do
+    rel="${f#"$CONTEXT_DIR"/"$area"/}"
+    [ -f "$from/$rel" ] || printf '%s/%s\n' "$area" "$rel" >> "$NONMD_LIST"
+  done
+done
+
 diverged_count=$(wc -l < "$DIVERGED_LIST" | tr -d ' ')
 added_count=$(wc -l < "$MISSING_LIST" | tr -d ' ')
+nonmd_count=$(wc -l < "$NONMD_LIST" | tr -d ' ')
+total_count=$(wc -l < "$TOTAL_LIST" | tr -d ' ')
 
-if [ "$diverged_count" -eq 0 ] && [ "$added_count" -eq 0 ]; then
+# Backstop. Every single file differing is not a real editing pattern - it is
+# the signature of a systemic mismatch (wrong baseline, or an encoding or
+# line-ending transform). Promoting them all would turn a pristine deployment
+# into a total fork, pinning every file with "mode: replace" so no upstream
+# improvement ever reaches it again. Refuse rather than do that silently.
+if [ "$total_count" -gt 1 ] && [ "$diverged_count" -eq "$total_count" ]; then
+  echo "ERROR: every one of the $total_count base files differs from the baseline." >&2
+  echo "       That is a systemic mismatch, not consumer edits - check the baseline" >&2
+  echo "       version (--from) and that the checkout has not rewritten line endings." >&2
+  echo "       Refusing to promote every file into overrides." >&2
+  exit 1
+fi
+
+if [ "$diverged_count" -eq 0 ] && [ "$added_count" -eq 0 ] && [ "$nonmd_count" -eq 0 ]; then
   echo "No local modifications detected — this deployment is pristine."
 else
   if [ "$diverged_count" -gt 0 ]; then
@@ -160,7 +198,21 @@ else
     done < "$MISSING_LIST"
     echo ""
   fi
+  if [ "$nonmd_count" -gt 0 ]; then
+    echo "Non-markdown files you added ($nonmd_count) — will move to overrides:"
+    while IFS= read -r rel; do
+      [ -n "$rel" ] || continue
+      echo "  $rel  ->  .context/overrides/$rel"
+    done < "$NONMD_LIST"
+    echo ""
+  fi
 fi
+
+# State the destructive behaviour before it happens, not after.
+echo "This migration replaces .context/{standards,playbooks,conventions} wholesale."
+echo "Anything listed above is preserved under .context/overrides/. A base file you"
+echo "deleted is restored, because the base is owned by the library, not by you."
+echo ""
 
 if [ "$APPLY" -eq 0 ]; then
   echo "Nothing written. Re-run with --apply to perform the migration."
@@ -206,6 +258,16 @@ while IFS= read -r rel; do
   promote "$rel" standalone
   rm -f "$CONTEXT_DIR/$rel"
 done < "$MISSING_LIST"
+
+# Consumer-owned non-markdown files: copied verbatim, with no frontmatter -
+# they are not markdown, so a YAML header would corrupt them.
+while IFS= read -r rel; do
+  [ -n "$rel" ] || continue
+  dst="$CONTEXT_DIR/overrides/$rel"
+  mkdir -p "$(dirname "$dst")"
+  cat "$CONTEXT_DIR/$rel" > "$dst"
+  rm -f "$CONTEXT_DIR/$rel"
+done < "$NONMD_LIST"
 
 echo "Restoring base content from $SOURCE_ROOT ..."
 for pair in "standards:$SOURCE_ROOT/standards" "playbooks:$SOURCE_ROOT/playbooks" "conventions:$SOURCE_ROOT/core/.context/conventions"; do

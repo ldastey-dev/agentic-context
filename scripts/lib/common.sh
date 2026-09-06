@@ -216,9 +216,48 @@ ac_hash_source_tree() {
   } | LC_ALL=C sort
 }
 
+# Hash a text file with line endings normalised to LF.
+#
+# Baselines are generated on LF checkouts but compared against a consumer's
+# working tree. A Windows checkout with core.autocrlf=true has CRLF in every
+# file, so a byte hash would report every framework file as modified when the
+# consumer has changed nothing. Only used for cross-machine comparison; the
+# manifest keeps byte-exact hashes, which are always written and read on the
+# same machine.
+ac_sha256_lf() {
+  local file="$1"
+  if command -v shasum >/dev/null 2>&1; then
+    tr -d '\r' < "$file" | shasum -a 256 | awk '{print $1}'
+  elif command -v sha256sum >/dev/null 2>&1; then
+    tr -d '\r' < "$file" | sha256sum | awk '{print $1}'
+  else
+    echo "ERROR: neither shasum nor sha256sum is available" >&2
+    return 1
+  fi
+}
+
 # Look up one path's expected hash in a baseline file.
 ac_baseline_lookup() {
   local baseline="$1" path="$2"
   [ -f "$baseline" ] || return 1
   awk -v p="$path" '$1 == p { print $2; found = 1; exit } END { exit !found }' "$baseline"
+}
+
+# --- managed block ---------------------------------------------------------
+#
+# The consumer owns AGENTS.md; the framework owns only the region between these
+# markers. Both markers are required. A begin marker with no end marker is
+# malformed, and treating it as a block would swallow every line to EOF - which
+# in AGENTS.md is the consumer's own configuration.
+AC_BEGIN_MARKER='<!-- agentic-context:begin'
+AC_END_MARKER='<!-- agentic-context:end -->'
+
+# Return 0 only when the file contains a well-formed (begin AND end) block.
+# Mirrors Test-AcManagedBlock in common.ps1; the two must stay equivalent.
+ac_has_managed_block() {
+  local file="$1"
+  [ -f "$file" ] || return 1
+  grep -q "^$AC_BEGIN_MARKER" "$file" 2>/dev/null || return 1
+  grep -qF "$AC_END_MARKER" "$file" 2>/dev/null || return 1
+  return 0
 }

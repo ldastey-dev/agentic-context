@@ -79,6 +79,46 @@ jobs:
           done
           exit $status
 
+      - name: Deployable paths cover everything that ships
+        run: |
+          # is_deployable in next-version.sh decides whether a change cuts a
+          # release. If a file reaches consumers but is not listed there, the
+          # change silently never releases and the omission is only discovered
+          # when a consumer notices missing content. A rule this load-bearing
+          # must not depend on remembering a checklist item.
+          set -uo pipefail
+          status=0
+          # Everything the deploy scripts copy into a target repository.
+          shipped="core standards playbooks
+          scripts/deploy.sh scripts/deploy.ps1
+          scripts/update.sh scripts/update.ps1
+          scripts/migrate.sh scripts/migrate.ps1
+          scripts/lib/common.sh scripts/lib/common.ps1"
+          for path in $shipped; do
+            if [ -d "$path" ]; then
+              probe="$path/__probe__.md"
+            else
+              probe="$path"
+            fi
+            printf '%s\n' "$probe" > /tmp/probe.txt
+            result="$(scripts/ci/next-version.sh --changed-files /tmp/probe.txt --subject 'fix: probe' --latest-tag v1.0.0)"
+            if [ "$result" = "none" ]; then
+              echo "::error file=scripts/ci/next-version.sh::'$probe' is deployed to consumers but is_deployable does not match it, so changing it would never cut a release."
+              status=1
+            fi
+          done
+          # And the inverse: non-deployable paths must not trigger releases.
+          for path in README.md AGENTS.md .github/workflows/release.yml scripts/ci/next-version.sh scripts/tests/test-deploy.sh; do
+            printf '%s\n' "$path" > /tmp/probe.txt
+            result="$(scripts/ci/next-version.sh --changed-files /tmp/probe.txt --subject 'fix: probe' --latest-tag v1.0.0)"
+            if [ "$result" != "none" ]; then
+              echo "::error file=scripts/ci/next-version.sh::'$path' never reaches a consumer but is_deployable matches it, so documentation and CI changes would cut releases."
+              status=1
+            fi
+          done
+          [ "$status" -eq 0 ] && echo "OK: deployable paths and is_deployable agree."
+          exit $status
+
   test:
     name: ${{ matrix.name }}
     strategy:

@@ -33,9 +33,12 @@ and no conflicts. Because overrides sit outside it, your customisations survive
 untouched. Divergence becomes structurally impossible rather than something you
 have to detect and reconcile.
 
-Your `AGENTS.md` gains a managed block delimited by
-`<!-- agentic-context:begin -->` and `<!-- agentic-context:end -->`. Only that
-block is rewritten on update; everything above and below it is yours.
+Your `AGENTS.md` gains a managed block. The start marker carries the version it
+was written from, so it looks like `<!-- agentic-context:begin 1.0.0 -->`, and
+the block ends with `<!-- agentic-context:end -->`. Both markers are required:
+tooling that finds a begin marker without a matching end marker treats the file
+as unmanaged and leaves it alone rather than guessing where the block stops.
+Only that block is rewritten on update; everything above and below it is yours.
 
 ### Migrating
 

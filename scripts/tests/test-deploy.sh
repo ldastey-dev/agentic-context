@@ -483,6 +483,154 @@ fi
 rm -f "$TC9_LIST"
 
 # ═══════════════════════════════════════════════════════════════════════
+# TC10: managed block safety
+#
+# These cover the destructive rewrite of a file the framework does not own.
+# A begin marker with no end marker must NOT be treated as a block: the
+# rewrite would otherwise swallow every line to EOF, destroying the consumer
+# configuration the block exists to protect.
+# ═══════════════════════════════════════════════════════════════════════
+echo ""
+echo "=== TC10: managed block detection ==="
+
+# shellcheck source=scripts/lib/common.sh
+. "$SCRIPTS_DIR/lib/common.sh"
+
+TC10_DIR=$(mktemp -d)
+
+printf '<!-- agentic-context:begin 1.0.0 -->\nF\n<!-- agentic-context:end -->\n\n## MINE\nkeep\n' > "$TC10_DIR/well-formed.md"
+printf '<!-- agentic-context:begin 1.0.0 -->\nF\n\n## MINE\nkeep\n' > "$TC10_DIR/no-end.md"
+printf '## MINE\nkeep\n' > "$TC10_DIR/no-block.md"
+printf '<!-- agentic-context:begin 1.0.0 -->\r\nF\r\n<!-- agentic-context:end -->\r\n' > "$TC10_DIR/crlf.md"
+
+if ac_has_managed_block "$TC10_DIR/well-formed.md"; then
+  pass "managed block: well-formed file is recognised"
+else
+  fail "managed block: well-formed file was not recognised"
+fi
+
+if ac_has_managed_block "$TC10_DIR/no-end.md"; then
+  fail "managed block: begin-without-end was treated as a block (would truncate consumer content)"
+else
+  pass "managed block: begin-without-end is rejected"
+fi
+
+if ac_has_managed_block "$TC10_DIR/no-block.md"; then
+  fail "managed block: a file with no markers was treated as a block"
+else
+  pass "managed block: file with no markers is rejected"
+fi
+
+if ac_has_managed_block "$TC10_DIR/missing-entirely.md"; then
+  fail "managed block: a missing file was treated as a block"
+else
+  pass "managed block: missing file is rejected"
+fi
+
+rm -rf "$TC10_DIR"
+
+# ═══════════════════════════════════════════════════════════════════════
+# TC11: migrate promotes divergence and restores the base
+#
+# migrate rewrites a repository it did not create, so its behaviour is
+# asserted rather than assumed: edits become overrides, consumer additions
+# survive, and base content is restored pristine.
+# ═══════════════════════════════════════════════════════════════════════
+echo ""
+echo "=== TC11: migrate ==="
+
+TC11_DIR=$(mktemp -d)
+(
+  cd "$TC11_DIR" && git init -q . && git config user.email t@t && git config user.name t
+)
+mkdir -p "$TC11_DIR/.context/standards" "$TC11_DIR/.context/conventions"
+cp "$REPO_DIR/standards/security.md" "$TC11_DIR/.context/standards/"
+cp "$REPO_DIR/core/.context/conventions/code.md" "$TC11_DIR/.context/conventions/"
+echo "MY LOCAL EDIT" >> "$TC11_DIR/.context/standards/security.md"
+echo "mine" > "$TC11_DIR/.context/standards/my-own.md"
+printf '{"k":1}\n' > "$TC11_DIR/.context/standards/fixture.json"
+(cd "$TC11_DIR" && git add -A >/dev/null 2>&1 && git commit -qm init >/dev/null 2>&1)
+
+TC11_OUT="$("$SCRIPTS_DIR/migrate.sh" --apply "$TC11_DIR" 2>&1)" || true
+
+if [ -f "$TC11_DIR/.context/overrides/standards/security.md" ] \
+  && grep -q 'MY LOCAL EDIT' "$TC11_DIR/.context/overrides/standards/security.md"; then
+  pass "migrate: edited base file promoted to overrides with content intact"
+else
+  fail "migrate: edited base file was not promoted (output: $TC11_OUT)"
+fi
+
+if grep -q 'mode: replace' "$TC11_DIR/.context/overrides/standards/security.md" 2>/dev/null; then
+  pass "migrate: promoted override carries mode: replace frontmatter"
+else
+  fail "migrate: promoted override is missing frontmatter"
+fi
+
+if [ -f "$TC11_DIR/.context/overrides/standards/my-own.md" ]; then
+  pass "migrate: consumer-added markdown preserved"
+else
+  fail "migrate: consumer-added markdown was lost"
+fi
+
+# Regression: the restore wipes each area wholesale, so a non-markdown file the
+# consumer added must be moved out first or it is destroyed silently.
+if [ -f "$TC11_DIR/.context/overrides/standards/fixture.json" ]; then
+  pass "migrate: consumer-added non-markdown preserved"
+else
+  fail "migrate: consumer-added non-markdown was destroyed by the restore"
+fi
+
+if [ -f "$TC11_DIR/.context/standards/security.md" ] \
+  && ! grep -q 'MY LOCAL EDIT' "$TC11_DIR/.context/standards/security.md"; then
+  pass "migrate: base file restored pristine"
+else
+  fail "migrate: base file was not restored pristine"
+fi
+
+rm -rf "$TC11_DIR"
+
+# ═══════════════════════════════════════════════════════════════════════
+# TC12: migrate refuses a systemic mismatch
+#
+# A CRLF checkout makes every file hash differently. Classifying all of them
+# as consumer edits would silently convert a pristine deployment into a total
+# fork, so line endings are normalised and an all-files-differ result is
+# refused outright.
+# ═══════════════════════════════════════════════════════════════════════
+echo ""
+echo "=== TC12: migrate line endings ==="
+
+TC12_DIR=$(mktemp -d)
+(
+  cd "$TC12_DIR" && git init -q . && git config user.email t@t && git config user.name t
+)
+mkdir -p "$TC12_DIR/.context/standards"
+for f in security.md testing.md code-quality.md; do
+  sed 's/$/\r/' "$REPO_DIR/standards/$f" > "$TC12_DIR/.context/standards/$f"
+done
+(cd "$TC12_DIR" && git add -A >/dev/null 2>&1 && git commit -qm init >/dev/null 2>&1)
+
+TC12_OUT="$("$SCRIPTS_DIR/migrate.sh" "$TC12_DIR" 2>&1)" || true
+if printf '%s' "$TC12_OUT" | grep -q 'pristine'; then
+  pass "migrate: CRLF checkout is not misread as wholesale divergence"
+else
+  fail "migrate: CRLF checkout reported as diverged (output: $TC12_OUT)"
+fi
+
+# And the backstop itself: a genuinely wrong baseline must refuse, not promote.
+TC12_BAD="$(mktemp)"
+printf 'standards/security.md  %s\n' "0000000000000000000000000000000000000000000000000000000000000000" > "$TC12_BAD"
+printf 'standards/testing.md  %s\n' "0000000000000000000000000000000000000000000000000000000000000000" >> "$TC12_BAD"
+printf 'standards/code-quality.md  %s\n' "0000000000000000000000000000000000000000000000000000000000000000" >> "$TC12_BAD"
+if "$SCRIPTS_DIR/migrate.sh" --baseline "$TC12_BAD" "$TC12_DIR" >/dev/null 2>&1; then
+  fail "migrate: a baseline matching nothing was accepted (would fork every file)"
+else
+  pass "migrate: refuses when every file differs from the baseline"
+fi
+rm -f "$TC12_BAD"
+rm -rf "$TC12_DIR"
+
+# ═══════════════════════════════════════════════════════════════════════
 # Summary
 # ═══════════════════════════════════════════════════════════════════════
 echo ""

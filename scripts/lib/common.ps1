@@ -212,7 +212,12 @@ function Write-AcManifest {
         [Parameter(Mandatory)][string]$Version,
         [string[]]$Agents = @(),
         [string]$SourceRepo = $script:AcSourceRepo,
-        [string]$CheckFrequency = 'weekly'
+        [string]$CheckFrequency = 'weekly',
+        # The pin is consumer configuration. Callers updating an existing
+        # deployment must pass the pin already recorded there, or a deliberate
+        # choice ("*" to accept majors, or an exact version to freeze) is
+        # silently reset to the new version's major line on every apply.
+        [string]$Pin = ''
     )
 
     if (-not (Test-Path -LiteralPath $ContextDir)) {
@@ -227,7 +232,7 @@ function Write-AcManifest {
         schema         = 1
         version        = $Version
         source         = $SourceRepo
-        pin            = "$(Get-AcSemVerPart $Version 'Major').x"
+        pin            = $(if ([string]::IsNullOrWhiteSpace($Pin)) { "$(Get-AcSemVerPart $Version 'Major').x" } else { $Pin })
         checkFrequency = $CheckFrequency
         deployedAt     = (Get-Date).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ')
         agents         = @($Agents)

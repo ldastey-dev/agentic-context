@@ -28,6 +28,8 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
 CHANGED_FILES=""
 SUBJECT=""
+BODY=""
+BODY_FILE=""
 CURRENT=""
 LATEST_TAG=""
 LATEST_TAG_SET=0
@@ -36,11 +38,18 @@ while [ $# -gt 0 ]; do
   case "$1" in
     --changed-files) CHANGED_FILES="${2:-}"; shift 2 ;;
     --subject) SUBJECT="${2:-}"; shift 2 ;;
+    --body) BODY="${2:-}"; shift 2 ;;
+    --body-file) BODY_FILE="${2:-}"; shift 2 ;;
     --current) CURRENT="${2:-}"; shift 2 ;;
     --latest-tag) LATEST_TAG="${2:-}"; LATEST_TAG_SET=1; shift 2 ;;
     *) echo "ERROR: unknown argument '$1'" >&2; exit 2 ;;
   esac
 done
+
+if [ -n "$BODY_FILE" ]; then
+  [ -f "$BODY_FILE" ] || { echo "ERROR: no such file: $BODY_FILE" >&2; exit 2; }
+  BODY="$(cat "$BODY_FILE")"
+fi
 
 [ -n "$CHANGED_FILES" ] || { echo "ERROR: --changed-files is required." >&2; exit 2; }
 [ -f "$CHANGED_FILES" ] || { echo "ERROR: no such file: $CHANGED_FILES" >&2; exit 2; }
@@ -98,15 +107,22 @@ fi
 # deployable change is a release regardless of how its author labelled it. An
 # unrecognised type therefore falls through to the patch floor rather than
 # blocking the release.
+# Every pattern below is anchored to the leading type token. An unanchored
+# match reads incidental prose as intent: "fix: cleanup foo!: bar" is a patch,
+# not a major, and "feature flags: add toggle" is not a feat.
 BUMP="patch"
-case "$SUBJECT" in
-  feat*) BUMP="minor" ;;
-esac
-case "$SUBJECT" in
-  # "type!: subject" and "type(scope)!: subject" both mark a breaking change.
-  *"!:"*) BUMP="major" ;;
-esac
-if printf '%s' "$SUBJECT" | grep -q 'BREAKING[ -]CHANGE'; then
+if printf '%s' "$SUBJECT" | grep -Eq '^feat(\([^)]*\))?!?:'; then
+  BUMP="minor"
+fi
+# "type!: subject" and "type(scope)!: subject" both mark a breaking change.
+if printf '%s' "$SUBJECT" | grep -Eq '^[a-zA-Z]+(\([^)]*\))?!:'; then
+  BUMP="major"
+fi
+# A BREAKING CHANGE footer is authoritative wherever it appears in the message.
+# The release job passes the full commit body precisely so this can be seen;
+# the gate only ever has the title, which is why it separately rejects a body
+# that declares a breaking change without the "!" marker in the title.
+if printf '%s' "$BODY" | grep -Eq '(^|[^[:alnum:]])BREAKING[ -]CHANGE'; then
   BUMP="major"
 fi
 

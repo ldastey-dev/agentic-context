@@ -147,7 +147,9 @@ if ($mode -eq 'check') {
     if ($pinOk) {
         Write-Host "agentic-context update available: $LocalVersion -> $Latest (run .context/bin/update.ps1 -Apply)"
     } else {
-        Write-Host "agentic-context $Latest is available but outside your pin '$Pin'. See MIGRATIONS.md, then use -Force."
+        # Link, do not name the file: MIGRATIONS.md is not deployed into
+        # consumer repositories, so naming it points at something they lack.
+        Write-Host "agentic-context $Latest is available but outside your pin '$Pin'. See $script:AcWebBase/$SourceRepo/blob/v$Latest/MIGRATIONS.md, then use -Force."
     }
     if ($Quiet) { exit 0 }
     Show-AcLocalState
@@ -157,7 +159,7 @@ if ($mode -eq 'check') {
 # --- apply -----------------------------------------------------------------
 
 if (-not $pinOk) {
-    Write-Error "Refusing to update: $Latest is outside the pin '$Pin'. This is a major upgrade. Read MIGRATIONS.md, then re-run with -Force."
+    Write-Error "Refusing to update: $Latest is outside the pin '$Pin'. This is a major upgrade. Read $script:AcWebBase/$SourceRepo/blob/v$Latest/MIGRATIONS.md, then re-run with -Force."
     exit 1
 }
 
@@ -262,7 +264,7 @@ try {
     if ($manifest -and $manifest.agents) { $agents = @($manifest.agents) }
 
     Write-AcManifest -ContextDir $ContextDir -Version $Latest -Agents $agents `
-        -SourceRepo $SourceRepo -CheckFrequency $Freq
+        -SourceRepo $SourceRepo -CheckFrequency $Freq -Pin $Pin
 
     Set-Content -LiteralPath (Join-Path $ContextDir 'VERSION') -Value $Latest -Encoding UTF8
 

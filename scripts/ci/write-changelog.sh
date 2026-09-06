@@ -62,11 +62,21 @@ if [ -n "$BREAKING" ]; then
   echo "" >> "$SECTION"
 fi
 
-emit_group '^feat(\([^)]*\))?!?: ' 'Features'
-emit_group '^fix(\([^)]*\))?!?: ' 'Fixes'
-emit_group '^(docs|refactor|perf|style)(\([^)]*\))?!?: ' 'Other changes'
+# These patterns deliberately exclude "!": a breaking commit is already listed
+# under "Breaking changes" above, and matching it again here would print it
+# twice in the same release section.
+emit_group '^feat(\([^)]*\))?: ' 'Features'
+emit_group '^fix(\([^)]*\))?: ' 'Fixes'
+emit_group '^(docs|refactor|perf|style)(\([^)]*\))?: ' 'Other changes'
+# build/ci/chore/test/revert are grouped rather than dropped. Editing a deploy
+# script under "chore:" is deployable and cuts a release, so without this the
+# release notes for a real change to shipped tooling would be empty.
+emit_group '^(build|ci|chore|test|revert)(\([^)]*\))?: ' 'Maintenance'
 
-if [ ! -s "$RAW" ]; then
+# Fall back when nothing was written, not merely when there were no commits at
+# all: a release whose commits all fell outside every group above would
+# otherwise publish a heading with no content under it.
+if [ "$(wc -l < "$SECTION" | tr -d ' ')" -le 2 ]; then
   echo "- No user-facing changes recorded." >> "$SECTION"
   echo "" >> "$SECTION"
 fi
