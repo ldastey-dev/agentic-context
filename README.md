@@ -116,17 +116,21 @@ standards/                              Tier 3 — reference (→ target .contex
   terraform.md                          HCL file layout, modules, tflint, Terratest
   ado-pipelines.md                      YAML triggers, templates, environments, approvals
   docker.md                             Multi-stage builds, layer optimisation, scanning
+  opentelemetry.md                      OpenTelemetry semantic conventions and SDK usage
+  opentelemetry-dotnet.md               OpenTelemetry instrumentation for .NET
+  playwright.md                         End-to-end browser testing with Playwright
 
 playbooks/                              Tier 2 — on demand (→ target .context/playbooks/)
-  assess/                               Structured codebase-level assessments (14)
+  assess/                               Structured codebase-level assessments (21)
     accessibility.md, api-design.md, architecture.md, aws-well-architected.md,
-    azure-well-architected.md, code-quality.md, compliance.md, full.md,
-    iac.md, observability.md, performance.md, security.md, tech-debt.md,
-    test-coverage.md
-  review/                               PR-level and change-level reviews (10)
+    azure-well-architected.md, ci-cd.md, code-quality.md, cost-optimisation.md,
+    domain-security.md, full.md, gdpr.md, iac.md, observability.md,
+    operational-excellence.md, pci-dss.md, pen-test.md, performance.md,
+    resilience.md, security.md, tech-debt.md, testing.md
+  review/                               PR-level and change-level reviews (11)
     accessibility.md, api-design.md, architecture.md, code-quality.md,
-    compliance.md, iac.md, observability.md, performance.md,
-    security.md, test-coverage.md
+    compliance.md, cost-optimisation.md, iac.md, observability.md,
+    performance.md, security.md, testing.md
   plan/                                 Design and decision documents (5)
     adr.md, design-doc.md, research.md, risk-assessment.md, spike.md
   refactor/                             Structured code change procedures (3)
@@ -135,12 +139,11 @@ playbooks/                              Tier 2 — on demand (→ target .contex
     scientific-debugging.md
   docs/                                 Developer-facing documentation generation (1)
     gitbook.md
-  setup/                                Setup and tooling playbooks (4)
+  setup/                                Setup and tooling playbooks (3)
     create-local-otel-stack.md
     create-local-otel-stack/            (companion scripts and configs — deployed alongside the playbook)
     discover-local-otel-stack.md
     use-local-otel-stack.md
-    instrument-dotnet-otel.md
 
 scripts/                                Distribution tooling (not deployed to targets)
   deploy.sh / deploy.ps1                First-time install into a target repository
@@ -148,7 +151,8 @@ scripts/                                Distribution tooling (not deployed to ta
   migrate.sh / migrate.ps1              One-off upgrade for unversioned deployments
   lib/                                  Shared helpers (SemVer, manifest, hashing)
   ci/                                   Release automation helpers (version, changelog, baseline)
-  baselines/<version>.sha256            Per-release hashes of deployable files
+  baselines/<version>.sha256            Per-release hashes of deployable files (written by CI)
+  baselines/unversioned.sha256          Hashes of the pre-versioning content, for migrate
   deploy.Tests.ps1                      Pester unit tests
   tests/                                End-to-end test suites (bash and PowerShell)
 

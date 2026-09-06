@@ -16,7 +16,7 @@ param(
     [Parameter(Position = 0)]
     [string]$Target = '',
     [switch]$Apply,
-    [string]$From = '1.0.0',
+    [string]$From = 'unversioned',
     [string]$Baseline = ''
 )
 

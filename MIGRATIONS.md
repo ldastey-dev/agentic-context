@@ -56,7 +56,7 @@ Run the migration from the root of the repository that has the deployment:
 
 The migration:
 
-1. Compares every deployed file against the published `1.0.0` baseline, so it
+1. Compares every deployed file against the `unversioned` baseline, so it
    can tell a file you edited from one you never touched.
 2. Promotes each edited file into `.context/overrides/`, preserving your content
    and marking it `mode: replace`.
@@ -83,8 +83,11 @@ judgements for you:
   addition rather than a contradiction, `extend` keeps the library version and
   appends yours. See `.context/overrides/README.md`.
 
-The migration compares against the `1.0.0` baseline by default, which hashes the
-content this library shipped at the point versioning was introduced. If you
+The migration compares against the `unversioned` baseline by default, which
+hashes the content this library shipped immediately before versioning was
+introduced - that is, what you deployed. It is deliberately distinct from the
+per-release `<version>.sha256` baselines, which record what each tagged release
+shipped. If you
 deployed from an older commit than that, some files will be reported as edited
 when you never touched them — promote only the ones you recognise, or pass
 `--baseline` to point at a baseline file you generated yourself from the commit

@@ -26,7 +26,7 @@ fi
 
 APPLY=0
 TARGET=""
-FROM_VERSION="1.0.0"
+FROM_VERSION="unversioned"
 BASELINE=""
 
 usage() {
@@ -36,7 +36,8 @@ Usage: migrate.sh [--apply] [--from <version>] [--baseline <file>] [target-repo]
 Upgrade an unversioned deployment to the override model.
 
   --apply             Write changes. Without it, reports what would happen and exits.
-  --from <version>    Version the target was deployed from. Default: 1.0.0
+  --from <baseline>   Content the target was deployed from. Default: unversioned
+                      (the pre-versioning content). Otherwise a published version.
   --baseline <file>   Baseline hash file. Default: scripts/baselines/<from>.sha256
   target-repo         Repository to migrate. Default: current directory.
 

@@ -150,7 +150,7 @@ Generated into the target, with no source file here: `<repo>/.context/manifest.j
 
 ### Versioning and releases
 
-**Never edit `VERSION`, `CHANGELOG.md`, or `scripts/baselines/` by hand.** All three are written by `.github/workflows/release.yml` when a change lands on `main`, and `.github/workflows/version-gate.yml` rejects any pull request that touches them. A hand-written baseline is the most damaging of the three: `migrate.sh` uses it to tell a pristine file from a consumer's edit, so a wrong baseline silently corrupts every future migration.
+**Never edit `VERSION`, `CHANGELOG.md`, or `scripts/baselines/<version>.sha256` by hand.** All three are written by `.github/workflows/release.yml` when a change lands on `main`, and `.github/workflows/version-gate.yml` rejects any pull request that touches them. A hand-written baseline is the most damaging of the three: `migrate.sh` uses it to tell a pristine file from a consumer's edit, so a wrong baseline silently corrupts every future migration.
 
 A release is cut only when **deployable content** changes. Deployable means content that reaches a consumer repository:
 
@@ -229,7 +229,7 @@ Additional rules that apply specifically to maintainers of this template repo:
 - `scripts/deploy.ps1` must run on Windows PowerShell 5.1 as well as PowerShell 7+. No PowerShell 7-only syntax.
 - The same portability and behaviour-equivalence rules apply in full to `scripts/update.*`, `scripts/migrate.*` and `scripts/lib/common.*`. They ship to consumers and run on their machines, not ours.
 - The deploy-script workflows must run on every pull request from any branch, with no path filters. Never narrow their triggers.
-- Never edit `VERSION`, `CHANGELOG.md` or `scripts/baselines/` by hand. CI owns all three.
+- Never edit `VERSION`, `CHANGELOG.md` or `scripts/baselines/<version>.sha256` by hand. CI owns all three. `scripts/baselines/unversioned.sha256` is the one exception: it records the pre-versioning content for `migrate`, is committed by hand, and CI can never overwrite it because `write-baseline.sh` accepts only valid SemVer.
 - Never add a file to a consumer's base layer that a consumer would want to edit. It belongs in the override layer, or it will be destroyed on the next update.
 - Never let an unrecognised commit type block a release. The type sets the size of a bump, never whether one happens.
 
@@ -245,7 +245,7 @@ Before opening a PR, confirm:
 - [ ] If an update or migrate script change: the bash and PowerShell versions were run against the same fixture and their output trees diffed for parity.
 - [ ] If a new file now ships to consumers: `is_deployable` in `scripts/ci/next-version.sh` was updated, or it will never trigger a release.
 - [ ] If consumers must act to upgrade: `MIGRATIONS.md` has a section for it.
-- [ ] No hand-edits to `VERSION`, `CHANGELOG.md` or `scripts/baselines/`.
+- [ ] No hand-edits to `VERSION`, `CHANGELOG.md` or `scripts/baselines/<version>.sha256`.
 - [ ] If a new agent: redirect file added under `core/`, both deploy scripts updated, README table updated.
 - [ ] British English, kebab-case, prescriptive language.
 - [ ] No engagement artefacts or generated deploy outputs in the diff.
