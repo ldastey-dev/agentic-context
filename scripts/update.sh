@@ -101,8 +101,11 @@ list_diverged() {
     actual="${line##*  }"
     # The key is interpolated into a sed pattern, so regex metacharacters in
     # the path (every ".md" contains one) must be escaped or they match more
-    # than the literal name and can report a false divergence.
-    rel_escaped="$(printf '%s' "$rel" | sed 's/[][\\.*^$/]/\\&/g')"
+    # than the literal name and can report a false divergence. "|" is escaped
+    # because it is the delimiter of the substitution below; "/" is not, since
+    # it is neither a metacharacter nor the delimiter, and a backslash before
+    # an ordinary character is undefined behaviour in POSIX.
+    rel_escaped="$(printf '%s' "$rel" | sed 's/[][\\.*^$|]/\\&/g')"
     recorded="$(sed -n 's|.*"'"$rel_escaped"'"[[:space:]]*:[[:space:]]*"\([a-f0-9]*\)".*|\1|p' "$MANIFEST" | head -1)"
     if [ -n "$recorded" ] && [ "$recorded" != "$actual" ]; then
       printf '%s\n' "$rel"
