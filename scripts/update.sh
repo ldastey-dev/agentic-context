@@ -95,11 +95,15 @@ PIN="$(ac_manifest_get "$MANIFEST" pin)"
 
 # List base files whose current hash differs from the manifest record.
 list_diverged() {
-  local rel recorded actual
+  local rel recorded actual rel_escaped
   ac_hash_context_tree "$CONTEXT_DIR" | while IFS= read -r line; do
     rel="${line%%  *}"
     actual="${line##*  }"
-    recorded="$(sed -n 's|.*"'"$rel"'"[[:space:]]*:[[:space:]]*"\([a-f0-9]*\)".*|\1|p' "$MANIFEST" | head -1)"
+    # The key is interpolated into a sed pattern, so regex metacharacters in
+    # the path (every ".md" contains one) must be escaped or they match more
+    # than the literal name and can report a false divergence.
+    rel_escaped="$(printf '%s' "$rel" | sed 's/[][\\.*^$/]/\\&/g')"
+    recorded="$(sed -n 's|.*"'"$rel_escaped"'"[[:space:]]*:[[:space:]]*"\([a-f0-9]*\)".*|\1|p' "$MANIFEST" | head -1)"
     if [ -n "$recorded" ] && [ "$recorded" != "$actual" ]; then
       printf '%s\n' "$rel"
     fi
@@ -324,7 +328,11 @@ fi
 
 # Rewrite the manifest with the new version and fresh hashes.
 now="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
-agents_json="$(sed -n 's/.*"agents"[[:space:]]*:[[:space:]]*\(\[[^]]*\]\).*/\1/p' "$MANIFEST" | head -1)"
+# ConvertTo-Json in deploy.ps1 writes arrays across multiple lines, so a
+# single-line pattern silently finds nothing and resets the agent list to
+# empty - which then changes what a later deploy writes. Collapse the file to
+# one line first so both manifest styles parse identically.
+agents_json="$(tr -d '\n' < "$MANIFEST" | sed -n 's/.*"agents"[[:space:]]*:[[:space:]]*\(\[[^]]*\]\).*/\1/p' | tr -s ' ')"
 [ -n "$agents_json" ] || agents_json='[]'
 freq="$(ac_manifest_get "$MANIFEST" checkFrequency)"
 [ -n "$freq" ] || freq="weekly"

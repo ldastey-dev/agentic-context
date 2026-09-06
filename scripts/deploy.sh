@@ -165,6 +165,52 @@ copy_dir_contents() {
   done < <(find "$src" -type f -print0 | sort -z)
 }
 
+# Copy core/.context but skip the override subtree, which is seeded separately
+# and must never be overwritten.
+copy_dir_contents_excluding_overrides() {
+  local src="$1"
+  local dst="$2"
+  local rel_path
+
+  while IFS= read -r -d '' file; do
+    rel_path="${file#"$src"/}"
+    case "$rel_path" in
+      overrides/*) continue ;;
+    esac
+    copy_file "$file" "$dst/$rel_path"
+  done < <(find "$src" -type f -print0 | sort -z)
+}
+
+# Seed a file only when it is absent, ignoring --overwrite entirely.
+#
+# The override tree is consumer-owned: the whole architecture depends on the
+# framework never writing there, because that is what makes the base
+# disposable. copy_file honours --overwrite, so using it for the override
+# scaffolding would let a redeploy destroy a consumer's own README - the very
+# file where they document why their overrides exist.
+seed_file_if_absent() {
+  local src="$1"
+  local dst="$2"
+
+  if [[ -e "$dst" ]]; then
+    return 0
+  fi
+
+  mkdir -p "$(dirname "$dst")"
+  cp "$src" "$dst"
+}
+
+seed_dir_if_absent() {
+  local src="$1"
+  local dst="$2"
+  local rel_path
+
+  while IFS= read -r -d '' file; do
+    rel_path="${file#"$src"/}"
+    seed_file_if_absent "$file" "$dst/$rel_path"
+  done < <(find "$src" -type f -print0 | sort -z)
+}
+
 # --- managed block ---------------------------------------------------------
 #
 # The consumer owns AGENTS.md: it carries their [CONFIGURE] sections. The
@@ -658,7 +704,10 @@ echo "  Selected agents: $(join_by ', ' "${ENABLED_AGENTS[@]}")"
 
 echo "  Copying shared context files..."
 deploy_agents_md "$SOURCE_ROOT/core/AGENTS.md" "$TARGET/AGENTS.md" "$DEPLOY_VERSION"
-copy_dir_contents "$SOURCE_ROOT/core/.context" "$TARGET/.context"
+# The override subtree is deliberately excluded here and seeded later with
+# seed_dir_if_absent, so that --overwrite can never rewrite consumer-owned
+# files under .context/overrides/.
+copy_dir_contents_excluding_overrides "$SOURCE_ROOT/core/.context" "$TARGET/.context"
 
 if agent_enabled claude; then
   echo "  Copying Claude Code files..."
@@ -756,7 +805,7 @@ fi
 # Consumer-owned override tree. Created empty; never touched again by update.
 echo "  Creating override layer → $TARGET/.context/overrides/"
 mkdir -p "$TARGET/.context/overrides"
-copy_dir_contents "$SOURCE_ROOT/core/.context/overrides" "$TARGET/.context/overrides"
+seed_dir_if_absent "$SOURCE_ROOT/core/.context/overrides" "$TARGET/.context/overrides"
 
 # Update tooling, shipped into the target so it can maintain itself.
 echo "  Installing update tooling → $TARGET/.context/bin/"

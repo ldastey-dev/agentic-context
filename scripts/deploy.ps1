@@ -204,9 +204,59 @@ function Copy-DirectoryContents {
     if (-not (Test-Path $Destination)) {
         New-Item -ItemType Directory -Path $Destination -Force | Out-Null
     }
-    $sourceFiles = Get-ChildItem -Path $Source -Recurse -File
+    # -Force is required or dotfiles are skipped: the override scaffolding
+    # ships .gitkeep files, and without this the subdirectories are never
+    # created, diverging from deploy.sh.
+    $sourceFiles = Get-ChildItem -Path $Source -Recurse -File -Force
     foreach ($file in $sourceFiles) {
         $relativePath = $file.FullName.Substring($Source.TrimEnd('/\').Length + 1)
+        $destPath = Join-Path $Destination $relativePath
+        Copy-SingleFile -Source $file.FullName -Destination $destPath
+    }
+}
+
+# Seed files only where absent, ignoring -Overwrite entirely.
+#
+# The override tree is consumer-owned: the whole architecture depends on the
+# framework never writing there, because that is what makes the base
+# disposable. Copy-SingleFile honours -Overwrite, so using it for the override
+# scaffolding would let a redeploy destroy a consumer's own README - the very
+# file where they document why their overrides exist.
+function Copy-AcSeedContents {
+    param([string]$Source, [string]$Destination)
+    if (-not (Test-Path $Destination)) {
+        New-Item -ItemType Directory -Path $Destination -Force | Out-Null
+    }
+    # -Force is required or dotfiles are skipped: the override scaffolding
+    # ships .gitkeep files, and without this the subdirectories are never
+    # created, diverging from deploy.sh.
+    $sourceFiles = Get-ChildItem -Path $Source -Recurse -File -Force
+    foreach ($file in $sourceFiles) {
+        $relativePath = $file.FullName.Substring($Source.TrimEnd('/\').Length + 1)
+        $destPath = Join-Path $Destination $relativePath
+        if (Test-Path -LiteralPath $destPath) { continue }
+        $parent = Split-Path -Parent $destPath
+        if (-not (Test-Path -LiteralPath $parent)) {
+            New-Item -ItemType Directory -Path $parent -Force | Out-Null
+        }
+        Copy-Item -LiteralPath $file.FullName -Destination $destPath -Force
+    }
+}
+
+# Copy core/.context but skip the override subtree, which is seeded separately
+# and must never be overwritten.
+function Copy-AcContextExcludingOverrides {
+    param([string]$Source, [string]$Destination)
+    if (-not (Test-Path $Destination)) {
+        New-Item -ItemType Directory -Path $Destination -Force | Out-Null
+    }
+    # -Force is required or dotfiles are skipped: the override scaffolding
+    # ships .gitkeep files, and without this the subdirectories are never
+    # created, diverging from deploy.sh.
+    $sourceFiles = Get-ChildItem -Path $Source -Recurse -File -Force
+    foreach ($file in $sourceFiles) {
+        $relativePath = $file.FullName.Substring($Source.TrimEnd('/\').Length + 1)
+        if ($relativePath.Replace('\', '/') -like 'overrides/*') { continue }
         $destPath = Join-Path $Destination $relativePath
         Copy-SingleFile -Source $file.FullName -Destination $destPath
     }
@@ -589,7 +639,7 @@ if (-not (Test-Path -LiteralPath $agentsDst)) {
     Copy-SingleFile -Source $agentsSrc -Destination $agentsDst
 }
 
-Copy-DirectoryContents -Source (Join-Path $SourceRoot 'core/.context') -Destination (Join-Path $script:Target '.context')
+Copy-AcContextExcludingOverrides -Source (Join-Path $SourceRoot 'core/.context') -Destination (Join-Path $script:Target '.context')
 
 if (Test-AgentEnabled 'claude') {
     Write-Host "  Copying Claude Code files..."
@@ -671,7 +721,7 @@ $overrideDst = Join-Path $script:Target '.context/overrides'
 if (-not (Test-Path -LiteralPath $overrideDst)) {
     New-Item -ItemType Directory -Path $overrideDst -Force | Out-Null
 }
-Copy-DirectoryContents -Source (Join-Path $SourceRoot 'core/.context/overrides') -Destination $overrideDst
+Copy-AcSeedContents -Source (Join-Path $SourceRoot 'core/.context/overrides') -Destination $overrideDst
 
 # Update tooling, shipped into the target so it can maintain itself.
 Write-Host "  Installing update tooling -> $(Join-Path $script:Target '.context/bin')"

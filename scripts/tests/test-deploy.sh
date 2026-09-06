@@ -633,6 +633,56 @@ rm -rf "$TC12_DIR"
 # ═══════════════════════════════════════════════════════════════════════
 # Summary
 # ═══════════════════════════════════════════════════════════════════════
+# ═══════════════════════════════════════════════════════════════════════
+# TC13: the override layer is consumer-owned and survives --overwrite
+#
+# The whole architecture depends on the framework never writing under
+# .context/overrides/ - that is what makes the base disposable. Scaffolding
+# was previously copied with the normal overwrite rules, so a redeploy with
+# --overwrite destroyed a consumer's own overrides README.
+# ═══════════════════════════════════════════════════════════════════════
+echo ""
+echo "=== TC13: override layer ownership ==="
+
+TC13_DIR=$(mktemp -d)
+"$SCRIPTS_DIR/deploy.sh" --agents claude --overwrite "$TC13_DIR" >/dev/null 2>&1
+
+printf 'MY OWN OVERRIDE NOTES\n' > "$TC13_DIR/.context/overrides/README.md"
+printf 'my custom rule\n' > "$TC13_DIR/.context/overrides/standards/security.md"
+
+"$SCRIPTS_DIR/deploy.sh" --agents claude --overwrite "$TC13_DIR" >/dev/null 2>&1
+
+if grep -q 'MY OWN OVERRIDE NOTES' "$TC13_DIR/.context/overrides/README.md" 2>/dev/null; then
+  pass "deploy: --overwrite preserves a consumer-edited overrides README"
+else
+  fail "deploy: --overwrite destroyed the consumer-owned overrides README"
+fi
+
+if grep -q 'my custom rule' "$TC13_DIR/.context/overrides/standards/security.md" 2>/dev/null; then
+  pass "deploy: --overwrite preserves a consumer override file"
+else
+  fail "deploy: --overwrite destroyed a consumer override file"
+fi
+
+# The scaffolding must still be seeded on a fresh deployment.
+if [ -f "$TC13_DIR/.context/overrides/playbooks/.gitkeep" ]; then
+  pass "deploy: override scaffolding seeded"
+else
+  fail "deploy: override scaffolding missing"
+fi
+
+# Base content must still be refreshed by --overwrite; the exemption is
+# scoped to overrides/ only.
+printf 'tampered\n' > "$TC13_DIR/.context/standards/security.md"
+"$SCRIPTS_DIR/deploy.sh" --agents claude --overwrite "$TC13_DIR" >/dev/null 2>&1
+if ! grep -qx 'tampered' "$TC13_DIR/.context/standards/security.md" 2>/dev/null; then
+  pass "deploy: --overwrite still refreshes base content"
+else
+  fail "deploy: --overwrite no longer refreshes base content"
+fi
+
+rm -rf "$TC13_DIR"
+
 echo ""
 echo "=== Results ==="
 echo "  Passed: $PASSED"

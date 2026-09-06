@@ -291,3 +291,46 @@ Describe 'migrate.ps1 (consumer content preservation)' {
         (Get-Content -LiteralPath $b -Raw) | Should -Not -Match 'MY LOCAL EDIT'
     }
 }
+
+Describe 'deploy.ps1 (override layer ownership)' {
+    BeforeAll {
+        $script:OvRepo = Split-Path -Parent $PSScriptRoot
+        $script:OvTmp = Join-Path ([System.IO.Path]::GetTempPath()) ("ac-ov-" + [guid]::NewGuid())
+        $deploy = Join-Path $script:OvRepo 'scripts/deploy.ps1'
+        New-Item -ItemType Directory -Path $script:OvTmp -Force | Out-Null
+
+        & pwsh -NoProfile -File $deploy -Target $script:OvTmp -Agents claude -Overwrite 2>&1 | Out-Null
+        Set-Content -LiteralPath (Join-Path $script:OvTmp '.context/overrides/README.md') -Value 'MY OWN OVERRIDE NOTES'
+        Set-Content -LiteralPath (Join-Path $script:OvTmp '.context/overrides/standards/security.md') -Value 'my custom rule'
+        Set-Content -LiteralPath (Join-Path $script:OvTmp '.context/standards/security.md') -Value 'tampered'
+        & pwsh -NoProfile -File $deploy -Target $script:OvTmp -Agents claude -Overwrite 2>&1 | Out-Null
+    }
+    AfterAll {
+        if (Test-Path -LiteralPath $script:OvTmp) { Remove-Item -LiteralPath $script:OvTmp -Recurse -Force }
+    }
+
+    # The override tree is consumer-owned; the base is disposable only because
+    # the framework never writes there. Scaffolding was previously copied with
+    # the normal overwrite rules, which destroyed a consumer's own README.
+    It 'preserves a consumer-edited overrides README under -Overwrite' {
+        (Get-Content -LiteralPath (Join-Path $script:OvTmp '.context/overrides/README.md') -Raw) |
+            Should -Match 'MY OWN OVERRIDE NOTES'
+    }
+
+    It 'preserves a consumer override file under -Overwrite' {
+        (Get-Content -LiteralPath (Join-Path $script:OvTmp '.context/overrides/standards/security.md') -Raw) |
+            Should -Match 'my custom rule'
+    }
+
+    # Get-ChildItem skips dotfiles without -Force, so the .gitkeep scaffolding
+    # was silently never deployed, diverging from deploy.sh.
+    It 'seeds the override scaffolding including dotfiles' {
+        Test-Path -LiteralPath (Join-Path $script:OvTmp '.context/overrides/playbooks/.gitkeep') |
+            Should -BeTrue
+    }
+
+    It 'still refreshes base content under -Overwrite' {
+        (Get-Content -LiteralPath (Join-Path $script:OvTmp '.context/standards/security.md') -Raw) |
+            Should -Not -Match '^tampered'
+    }
+}
