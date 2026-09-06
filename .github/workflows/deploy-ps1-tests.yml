@@ -5,7 +5,11 @@ name: deploy.ps1 tests
 # PowerShell 7+ across Windows, Linux and macOS, so it is tested on every push
 # and every pull request regardless of branch or changed paths.
 on:
+  # pull_request covers every PR from any head branch, and re-runs on each new
+  # commit pushed to that branch (the synchronize event). push is scoped to main
+  # so protecting the trunk does not double every PR run and slow the queue.
   push:
+    branches: [main]
   pull_request:
 
 # Supersede in-flight runs for the same ref so feedback tracks the latest push.
