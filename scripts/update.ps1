@@ -216,8 +216,19 @@ try {
         @{ Name = 'playbooks';   From = (Join-Path $srcPath 'playbooks') },
         @{ Name = 'conventions'; From = (Join-Path $srcPath 'core/.context/conventions') }
     )
+
+    # Validate the whole payload before deleting anything. Skipping a missing
+    # area would leave the previous content in place while the manifest and
+    # VERSION still advance, so the deployment would report a version it does
+    # not actually contain.
     foreach ($area in $areas) {
-        if (-not (Test-Path -LiteralPath $area.From)) { continue }
+        if (-not (Test-Path -LiteralPath $area.From)) {
+            Write-Error ("Downloaded archive is missing $($area.Name)/ - nothing was changed.")
+            exit 1
+        }
+    }
+
+    foreach ($area in $areas) {
         $dest = Join-Path $ContextDir $area.Name
         if (Test-Path -LiteralPath $dest) { Remove-Item -LiteralPath $dest -Recurse -Force }
         New-Item -ItemType Directory -Path $dest -Force | Out-Null

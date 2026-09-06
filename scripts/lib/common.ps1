@@ -18,6 +18,27 @@ function Get-AcFileHash {
     return $hash.Hash.ToLowerInvariant()
 }
 
+# Hash with CR stripped, matching ac_sha256_lf in common.sh. Baselines are
+# generated on LF checkouts, so comparing a CRLF working tree byte-for-byte
+# reports every file as edited. Only cross-machine baseline comparisons use
+# this; manifest hashes stay byte-exact because they are written and read on
+# the same machine.
+function Get-AcFileHashLf {
+    param([Parameter(Mandatory)][string]$Path)
+    $bytes = [System.IO.File]::ReadAllBytes($Path)
+    $out = New-Object System.Collections.Generic.List[byte]
+    foreach ($b in $bytes) {
+        if ($b -ne 13) { $out.Add($b) }
+    }
+    $sha = [System.Security.Cryptography.SHA256]::Create()
+    try {
+        $hash = $sha.ComputeHash($out.ToArray())
+    } finally {
+        $sha.Dispose()
+    }
+    return ([System.BitConverter]::ToString($hash) -replace '-', '').ToLowerInvariant()
+}
+
 # --- semver ----------------------------------------------------------------
 
 function ConvertTo-AcSemVer {

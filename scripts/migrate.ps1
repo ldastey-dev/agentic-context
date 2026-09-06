@@ -110,6 +110,8 @@ foreach ($line in (Get-Content -LiteralPath $Baseline)) {
 
 $diverged = New-Object System.Collections.Generic.List[string]
 $added = New-Object System.Collections.Generic.List[string]
+$nonMd = New-Object System.Collections.Generic.List[string]
+$totalCount = 0
 
 foreach ($area in @('standards', 'playbooks', 'conventions')) {
     $areaDir = Join-Path $ContextDir $area
@@ -122,7 +124,9 @@ foreach ($area in @('standards', 'playbooks', 'conventions')) {
 
     foreach ($f in $files) {
         $rel = $area + '/' + $f.FullName.Substring($full.Length).TrimStart($sep).Replace('\', '/')
-        $actual = Get-AcFileHash -Path $f.FullName
+        $totalCount++
+        # LF-normalised: a CRLF checkout must not make every file look edited.
+        $actual = Get-AcFileHashLf -Path $f.FullName
         if ($baselineMap.ContainsKey($rel)) {
             if ($baselineMap[$rel] -ne $actual) { $diverged.Add($rel) }
         } else {
@@ -132,7 +136,47 @@ foreach ($area in @('standards', 'playbooks', 'conventions')) {
     }
 }
 
-if ($diverged.Count -eq 0 -and $added.Count -eq 0) {
+# Non-markdown files. The baseline only covers .md, but the restore below
+# replaces each area wholesale, so anything else here is destroyed unless it is
+# recognised. A file that also exists in the source tree is a framework
+# companion (playbooks/setup ships shell scripts) and is restored intact; one
+# that does not is the consumer's own and must be preserved as an override.
+$sourceAreas = @(
+    @{ Name = 'standards';   From = (Join-Path $SourceRoot 'standards') },
+    @{ Name = 'playbooks';   From = (Join-Path $SourceRoot 'playbooks') },
+    @{ Name = 'conventions'; From = (Join-Path $SourceRoot 'core/.context/conventions') }
+)
+foreach ($area in $sourceAreas) {
+    $areaDir = Join-Path $ContextDir $area.Name
+    if (-not (Test-Path -LiteralPath $areaDir)) { continue }
+
+    $full = (Resolve-Path -LiteralPath $areaDir).Path
+    $sep = [System.IO.Path]::DirectorySeparatorChar
+    $files = Get-ChildItem -LiteralPath $full -Recurse -File -ErrorAction SilentlyContinue |
+        Where-Object { $_.Extension -ne '.md' } | Sort-Object FullName
+
+    foreach ($f in $files) {
+        $rel = $f.FullName.Substring($full.Length).TrimStart($sep).Replace('\', '/')
+        if (-not (Test-Path -LiteralPath (Join-Path $area.From $rel))) {
+            $nonMd.Add($area.Name + '/' + $rel)
+        }
+    }
+}
+
+# Backstop. Every single file differing is not a real editing pattern - it is
+# the signature of a systemic mismatch (wrong baseline, or an encoding or
+# line-ending transform). Promoting them all would turn a pristine deployment
+# into a total fork, pinning every file with "mode: replace" so no upstream
+# improvement ever reaches it again. Refuse rather than do that silently.
+if ($totalCount -gt 1 -and $diverged.Count -eq $totalCount) {
+    Write-Error ("Every one of the $totalCount base files differs from the baseline. " +
+        "That is a systemic mismatch, not consumer edits - check the baseline version " +
+        "(-From) and that the checkout has not rewritten line endings. " +
+        "Refusing to promote every file into overrides.")
+    exit 1
+}
+
+if ($diverged.Count -eq 0 -and $added.Count -eq 0 -and $nonMd.Count -eq 0) {
     Write-Host "No local modifications detected - this deployment is pristine."
 } else {
     if ($diverged.Count -gt 0) {
@@ -145,7 +189,18 @@ if ($diverged.Count -eq 0 -and $added.Count -eq 0) {
         foreach ($rel in $added) { Write-Host "  $rel  ->  .context/overrides/$rel" }
         Write-Host ""
     }
+    if ($nonMd.Count -gt 0) {
+        Write-Host "Non-markdown files you added ($($nonMd.Count)) - will move to overrides:"
+        foreach ($rel in $nonMd) { Write-Host "  $rel  ->  .context/overrides/$rel" }
+        Write-Host ""
+    }
 }
+
+# State the destructive behaviour before it happens, not after.
+Write-Host "This migration replaces .context/{standards,playbooks,conventions} wholesale."
+Write-Host "Anything listed above is preserved under .context/overrides/. A base file you"
+Write-Host "deleted is restored, because the base is owned by the library, not by you."
+Write-Host ""
 
 if (-not $Apply) {
     Write-Host "Nothing written. Re-run with -Apply to perform the migration."
@@ -197,13 +252,20 @@ foreach ($rel in $added) {
     Remove-Item -LiteralPath (Join-Path $ContextDir $rel) -Force -ErrorAction SilentlyContinue
 }
 
+# Consumer-owned non-markdown files: copied verbatim, with no frontmatter -
+# they are not markdown, so a YAML header would corrupt them.
+foreach ($rel in $nonMd) {
+    $dst = Join-Path $overrideRoot $rel
+    $parent = Split-Path -Parent $dst
+    if (-not (Test-Path -LiteralPath $parent)) {
+        New-Item -ItemType Directory -Path $parent -Force | Out-Null
+    }
+    Copy-Item -LiteralPath (Join-Path $ContextDir $rel) -Destination $dst -Force
+    Remove-Item -LiteralPath (Join-Path $ContextDir $rel) -Force -ErrorAction SilentlyContinue
+}
+
 Write-Host "Restoring base content from $SourceRoot ..."
-$areas = @(
-    @{ Name = 'standards';   From = (Join-Path $SourceRoot 'standards') },
-    @{ Name = 'playbooks';   From = (Join-Path $SourceRoot 'playbooks') },
-    @{ Name = 'conventions'; From = (Join-Path $SourceRoot 'core/.context/conventions') }
-)
-foreach ($area in $areas) {
+foreach ($area in $sourceAreas) {
     if (-not (Test-Path -LiteralPath $area.From)) { continue }
     $dest = Join-Path $ContextDir $area.Name
     if (Test-Path -LiteralPath $dest) { Remove-Item -LiteralPath $dest -Recurse -Force }

@@ -199,3 +199,95 @@ Describe 'Copy-SingleFile' {
         $firstBytes[0] | Should -Not -Be 0xEF
     }
 }
+
+Describe 'Get-AcFileHashLf' {
+    BeforeAll {
+        . (Join-Path (Split-Path -Parent $PSScriptRoot) 'scripts/lib/common.ps1')
+        $script:LfTmp = Join-Path ([System.IO.Path]::GetTempPath()) ("ac-lf-" + [guid]::NewGuid())
+        New-Item -ItemType Directory -Path $script:LfTmp -Force | Out-Null
+    }
+    AfterAll {
+        if (Test-Path -LiteralPath $script:LfTmp) { Remove-Item -LiteralPath $script:LfTmp -Recurse -Force }
+    }
+
+    # Baselines are generated on LF checkouts. Hashing a CRLF working tree
+    # byte-for-byte reports every file as edited, which made migrate promote a
+    # pristine deployment wholesale into "mode: replace" overrides - a silent
+    # permanent fork. The LF and CRLF forms of the same content must agree.
+    It 'returns the same hash for LF and CRLF forms of identical content' {
+        $lf = Join-Path $script:LfTmp 'lf.md'
+        $crlf = Join-Path $script:LfTmp 'crlf.md'
+        [System.IO.File]::WriteAllText($lf, "line one`nline two`n")
+        [System.IO.File]::WriteAllText($crlf, "line one`r`nline two`r`n")
+
+        Get-AcFileHashLf -Path $crlf | Should -Be (Get-AcFileHashLf -Path $lf)
+    }
+
+    # The byte-exact hash must still distinguish them, because manifest hashes
+    # rely on it for local change detection.
+    It 'differs from the byte-exact hash for CRLF content' {
+        $crlf = Join-Path $script:LfTmp 'crlf2.md'
+        [System.IO.File]::WriteAllText($crlf, "line one`r`nline two`r`n")
+
+        Get-AcFileHashLf -Path $crlf | Should -Not -Be (Get-AcFileHash -Path $crlf)
+    }
+
+    It 'still detects genuinely different content' {
+        $a = Join-Path $script:LfTmp 'a.md'
+        $b = Join-Path $script:LfTmp 'b.md'
+        [System.IO.File]::WriteAllText($a, "alpha`n")
+        [System.IO.File]::WriteAllText($b, "beta`n")
+
+        Get-AcFileHashLf -Path $a | Should -Not -Be (Get-AcFileHashLf -Path $b)
+    }
+}
+
+Describe 'migrate.ps1 (consumer content preservation)' {
+    BeforeAll {
+        $script:RepoRoot = Split-Path -Parent $PSScriptRoot
+        $script:MigTmp = Join-Path ([System.IO.Path]::GetTempPath()) ("ac-mig-" + [guid]::NewGuid())
+        New-Item -ItemType Directory -Path (Join-Path $script:MigTmp '.context/standards') -Force | Out-Null
+
+        Copy-Item -LiteralPath (Join-Path $script:RepoRoot 'standards/security.md') `
+            -Destination (Join-Path $script:MigTmp '.context/standards/security.md')
+        Add-Content -LiteralPath (Join-Path $script:MigTmp '.context/standards/security.md') -Value 'MY LOCAL EDIT'
+        Set-Content -LiteralPath (Join-Path $script:MigTmp '.context/standards/my-own.md') -Value 'mine'
+        Set-Content -LiteralPath (Join-Path $script:MigTmp '.context/standards/fixture.json') -Value '{"k":1}'
+
+        & pwsh -NoProfile -File (Join-Path $script:RepoRoot 'scripts/migrate.ps1') `
+            -Target $script:MigTmp -Apply 2>&1 | Out-Null
+    }
+    AfterAll {
+        if (Test-Path -LiteralPath $script:MigTmp) { Remove-Item -LiteralPath $script:MigTmp -Recurse -Force }
+    }
+
+    It 'promotes an edited base file into overrides with its content intact' {
+        $o = Join-Path $script:MigTmp '.context/overrides/standards/security.md'
+        Test-Path -LiteralPath $o | Should -BeTrue
+        (Get-Content -LiteralPath $o -Raw) | Should -Match 'MY LOCAL EDIT'
+    }
+
+    It 'marks a promoted override with mode: replace' {
+        (Get-Content -LiteralPath (Join-Path $script:MigTmp '.context/overrides/standards/security.md') -Raw) |
+            Should -Match 'mode: replace'
+    }
+
+    It 'preserves a consumer-added markdown file' {
+        Test-Path -LiteralPath (Join-Path $script:MigTmp '.context/overrides/standards/my-own.md') |
+            Should -BeTrue
+    }
+
+    # The restore deletes each area wholesale, so a non-markdown file the
+    # consumer added is destroyed unless it is classified and moved out first.
+    # The baseline only covers *.md, so this needed handling separately.
+    It 'preserves a consumer-added non-markdown file' {
+        Test-Path -LiteralPath (Join-Path $script:MigTmp '.context/overrides/standards/fixture.json') |
+            Should -BeTrue
+    }
+
+    It 'restores the base file pristine' {
+        $b = Join-Path $script:MigTmp '.context/standards/security.md'
+        Test-Path -LiteralPath $b | Should -BeTrue
+        (Get-Content -LiteralPath $b -Raw) | Should -Not -Match 'MY LOCAL EDIT'
+    }
+}
