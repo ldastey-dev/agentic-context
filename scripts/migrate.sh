@@ -1,7 +1,7 @@
 #!/bin/bash
-# migrate.sh — upgrade a pre-2.0 agentic-context deployment to the override model.
+# migrate.sh — upgrade an unversioned agentic-context deployment to the override model.
 #
-# Pre-2.0 deployments have no .context/manifest.json and no .context/overrides/.
+# Unversioned deployments have no .context/manifest.json and no .context/overrides/.
 # Consumers may have edited standards and playbooks directly. This script finds
 # those edits by comparing against a published baseline for the version they are
 # on, and promotes each edited file into .context/overrides/ so their intent is
@@ -33,7 +33,7 @@ usage() {
   cat <<EOF
 Usage: migrate.sh [--apply] [--from <version>] [--baseline <file>] [target-repo]
 
-Upgrade a pre-2.0 deployment to the override model.
+Upgrade an unversioned deployment to the override model.
 
   --apply             Write changes. Without it, reports what would happen and exits.
   --from <version>    Version the target was deployed from. Default: 1.0.0
@@ -80,7 +80,7 @@ fi
 if [ -f "$CONTEXT_DIR/manifest.json" ]; then
   existing="$(ac_manifest_get "$CONTEXT_DIR/manifest.json" version)"
   echo "This deployment already has a manifest (version ${existing:-unknown})."
-  echo "Migration is only for pre-2.0 deployments. Use update.sh --apply instead."
+  echo "Migration is only for unversioned deployments. Use update.sh --apply instead."
   exit 0
 fi
 
@@ -184,7 +184,7 @@ promote() {
       printf 'overrides: %s\n' "$rel"
       printf 'mode: replace\n'
       printf -- '---\n\n'
-      printf '<!-- Promoted from a pre-2.0 deployment by agentic-context migrate.\n'
+      printf '<!-- Promoted from an unversioned deployment by agentic-context migrate.\n'
       printf '     This was an edited copy of the framework file %s.\n' "$rel"
       printf '     Consider converting to "mode: extend" and keeping only your differences,\n'
       printf '     so you continue to inherit upstream improvements. -->\n\n'

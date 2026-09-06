@@ -5,10 +5,13 @@
 # call this, so the version shown on the PR is the version that is actually cut.
 #
 # Usage:
-#   next-version.sh --changed-files <file> --subject <commit subject> [--current <version>]
+#   next-version.sh --changed-files <file> --subject <commit subject>
+#                   [--current <version>] [--latest-tag <tag>]
 #
 # Reads the current version from ./VERSION unless --current is given.
 # --changed-files points at a newline-delimited list of paths changed by the merge.
+# --latest-tag names the most recent release tag; pass an empty string to state
+# that none exists. When omitted it is derived from git.
 #
 # Prints one of:
 #   <next-version>   when the change touches deployable content
@@ -26,12 +29,15 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 CHANGED_FILES=""
 SUBJECT=""
 CURRENT=""
+LATEST_TAG=""
+LATEST_TAG_SET=0
 
 while [ $# -gt 0 ]; do
   case "$1" in
     --changed-files) CHANGED_FILES="${2:-}"; shift 2 ;;
     --subject) SUBJECT="${2:-}"; shift 2 ;;
     --current) CURRENT="${2:-}"; shift 2 ;;
+    --latest-tag) LATEST_TAG="${2:-}"; LATEST_TAG_SET=1; shift 2 ;;
     *) echo "ERROR: unknown argument '$1'" >&2; exit 2 ;;
   esac
 done
@@ -68,6 +74,21 @@ done < "$CHANGED_FILES"
 
 if [ "$DEPLOYABLE" -eq 0 ]; then
   echo "none"
+  exit 0
+fi
+
+# --- the initial drop ------------------------------------------------------
+#
+# With no release tag there is nothing to bump from: the version already in
+# VERSION is the first release, published as-is. Bumping here would silently
+# skip 1.0.0 and make the first tag disagree with everything the repository
+# says its version is.
+if [ "$LATEST_TAG_SET" -eq 0 ]; then
+  LATEST_TAG="$(git -C "$REPO_ROOT" tag --list 'v*' --sort=-v:refname 2>/dev/null | head -n 1 || true)"
+fi
+
+if [ -z "$LATEST_TAG" ]; then
+  printf '%s\n' "$CURRENT"
   exit 0
 fi
 

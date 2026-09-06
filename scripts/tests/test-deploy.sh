@@ -439,9 +439,11 @@ TC9_LIST=$(mktemp)
 
 check_next() {
   # check_next <changed-path> <subject> <expected>
+  # --latest-tag is passed explicitly so the result does not depend on which
+  # tags happen to exist in the checkout running the tests.
   local got
   printf '%s\n' "$1" > "$TC9_LIST"
-  got=$("$SCRIPTS_DIR/ci/next-version.sh" --changed-files "$TC9_LIST" --subject "$2" --current 1.2.3)
+  got=$("$SCRIPTS_DIR/ci/next-version.sh" --changed-files "$TC9_LIST" --subject "$2" --current 1.2.3 --latest-tag v1.2.3)
   if [ "$got" = "$3" ]; then
     pass "next-version: $1 + '$2' -> $3"
   else
@@ -458,6 +460,25 @@ check_next "playbooks/assess/a.md" "feat!: x" "2.0.0"
 check_next "scripts/lib/common.ps1" "fix(deploy)!: x" "2.0.0"
 # An unrecognised type must still release, at the patch floor.
 check_next "standards/testing.md" "wibble: x" "1.2.4"
+
+# The initial drop: with no release tag there is nothing to bump from, so the
+# version already in VERSION is published as-is rather than skipping 1.0.0.
+printf '%s\n' "core/AGENTS.md" > "$TC9_LIST"
+TC9_INITIAL=$("$SCRIPTS_DIR/ci/next-version.sh" --changed-files "$TC9_LIST" --subject "feat!: x" --current 1.0.0 --latest-tag "")
+if [ "$TC9_INITIAL" = "1.0.0" ]; then
+  pass "next-version: no tag yet -> publishes 1.0.0 unchanged"
+else
+  fail "next-version: no tag yet gave '$TC9_INITIAL', expected '1.0.0'"
+fi
+
+# Non-deployable changes must still cut nothing, even with no tag.
+printf '%s\n' "README.md" > "$TC9_LIST"
+TC9_INITIAL_NONE=$("$SCRIPTS_DIR/ci/next-version.sh" --changed-files "$TC9_LIST" --subject "feat: x" --current 1.0.0 --latest-tag "")
+if [ "$TC9_INITIAL_NONE" = "none" ]; then
+  pass "next-version: no tag yet + non-deployable change -> none"
+else
+  fail "next-version: no tag yet + non-deployable gave '$TC9_INITIAL_NONE', expected 'none'"
+fi
 
 rm -f "$TC9_LIST"
 

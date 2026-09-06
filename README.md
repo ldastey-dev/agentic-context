@@ -145,7 +145,7 @@ playbooks/                              Tier 2 — on demand (→ target .contex
 scripts/                                Distribution tooling (not deployed to targets)
   deploy.sh / deploy.ps1                First-time install into a target repository
   update.sh / update.ps1                Staleness check and in-place update
-  migrate.sh / migrate.ps1              One-off upgrade for pre-2.0 deployments
+  migrate.sh / migrate.ps1              One-off upgrade for unversioned deployments
   lib/                                  Shared helpers (SemVer, manifest, hashing)
   ci/                                   Release automation helpers (version, changelog, baseline)
   baselines/<version>.sha256            Per-release hashes of deployable files

@@ -6,17 +6,22 @@ step.
 
 ---
 
-## 1.x to 2.0.0 — the override model
+## Unversioned to 1.0.0 — the override model
+
+If you deployed this library before it carried a `VERSION`, your deployment has
+no `.context/manifest.json` and no `.context/overrides/`. This is a one-off
+migration; every release after 1.0.0 is picked up by `update.sh` with no manual
+step.
 
 ### What changed
 
-Before 2.0.0, deploying was a one-way copy. Anything you edited afterwards was
+Before 1.0.0, deploying was a one-way copy. Anything you edited afterwards was
 yours, but the next deploy would either overwrite it or refuse to touch it, and
 nothing could tell the difference between a file you had deliberately customised
 and one you had never touched. In practice a deployment drifted from the library
 and could never be safely refreshed.
 
-From 2.0.0 the deployed tree is split in two:
+From 1.0.0 the deployed tree is split in two:
 
 | Layer | Path | Who owns it |
 | --- | --- | --- |
@@ -51,8 +56,8 @@ Run the migration from the root of the repository that has the deployment:
 
 The migration:
 
-1. Compares every deployed file against the published baseline for the version
-   you are on, so it can tell a file you edited from one you never touched.
+1. Compares every deployed file against the published `1.0.0` baseline, so it
+   can tell a file you edited from one you never touched.
 2. Promotes each edited file into `.context/overrides/`, preserving your content
    and marking it `mode: replace`.
 3. Restores the base to pristine library content.
@@ -78,10 +83,13 @@ judgements for you:
   addition rather than a contradiction, `extend` keeps the library version and
   appends yours. See `.context/overrides/README.md`.
 
-If you deployed on a version with no published baseline, pass `--from` to name
-the closest released version, or `--baseline` to point at a baseline file
-directly. Without a baseline the migration cannot distinguish your edits from
-library content and will not run.
+The migration compares against the `1.0.0` baseline by default, which hashes the
+content this library shipped at the point versioning was introduced. If you
+deployed from an older commit than that, some files will be reported as edited
+when you never touched them — promote only the ones you recognise, or pass
+`--baseline` to point at a baseline file you generated yourself from the commit
+you actually deployed. Without a baseline the migration cannot distinguish your
+edits from library content and will not run.
 
 ### If you never edited anything
 

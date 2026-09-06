@@ -1,6 +1,6 @@
-# migrate.ps1 - upgrade a pre-2.0 agentic-context deployment to the override model.
+# migrate.ps1 - upgrade an unversioned agentic-context deployment to the override model.
 #
-# Pre-2.0 deployments have no .context/manifest.json and no .context/overrides/.
+# Unversioned deployments have no .context/manifest.json and no .context/overrides/.
 # Consumers may have edited standards and playbooks directly. This script finds
 # those edits by comparing against a published baseline for the version they are
 # on, and promotes each edited file into .context/overrides/ so their intent is
@@ -56,7 +56,7 @@ if (Test-Path -LiteralPath $manifestPath) {
     $ver = 'unknown'
     if ($existing -and $existing.version) { $ver = $existing.version }
     Write-Host "This deployment already has a manifest (version $ver)."
-    Write-Host "Migration is only for pre-2.0 deployments. Use update.ps1 -Apply instead."
+    Write-Host "Migration is only for unversioned deployments. Use update.ps1 -Apply instead."
     exit 0
 }
 
@@ -178,7 +178,7 @@ function Move-AcToOverride {
             'mode: replace',
             '---',
             '',
-            '<!-- Promoted from a pre-2.0 deployment by agentic-context migrate.',
+            '<!-- Promoted from an unversioned deployment by agentic-context migrate.',
             "     This was an edited copy of the framework file $Rel.",
             '     Consider converting to "mode: extend" and keeping only your differences,',
             '     so you continue to inherit upstream improvements. -->',

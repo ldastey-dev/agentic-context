@@ -58,27 +58,44 @@ jobs:
           set -euo pipefail
           subject="$(git log -1 --pretty=format:'%s')"
           current="$(tr -d ' \t\r\n' < VERSION)"
-          next="$(scripts/ci/next-version.sh --changed-files /tmp/changed-files.txt --subject "$subject")"
+          prev_tag="$(git tag --list 'v*' --sort=-v:refname | head -n 1 || true)"
+          next="$(scripts/ci/next-version.sh --changed-files /tmp/changed-files.txt --subject "$subject" --latest-tag "$prev_tag")"
           echo "current=$current" >> "$GITHUB_OUTPUT"
           echo "next=$next" >> "$GITHUB_OUTPUT"
+          echo "prev_tag=$prev_tag" >> "$GITHUB_OUTPUT"
           if [ "$next" = "none" ]; then
             echo "No deployable content changed. Skipping release." >> "$GITHUB_STEP_SUMMARY"
+          elif [ -z "$prev_tag" ]; then
+            echo "Initial release: publishing $next as-is." >> "$GITHUB_STEP_SUMMARY"
           else
             echo "Releasing $current -> $next" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Fail if the release tag already exists
+        if: steps.next.outputs.next != 'none'
+        env:
+          NEXT: ${{ steps.next.outputs.next }}
+        run: |
+          set -euo pipefail
+          # Re-releasing an existing version would move a tag consumers have
+          # already pinned to, so stop rather than overwrite.
+          if git rev-parse -q --verify "refs/tags/v$NEXT" >/dev/null; then
+            echo "::error::Tag v$NEXT already exists. Refusing to re-release it."
+            exit 1
           fi
 
       - name: Write VERSION, CHANGELOG and baseline
         if: steps.next.outputs.next != 'none'
         env:
           NEXT: ${{ steps.next.outputs.next }}
+          PREV_TAG: ${{ steps.next.outputs.prev_tag }}
         run: |
           set -euo pipefail
-          prev_tag="$(git tag --list 'v*' --sort=-v:refname | head -n 1 || true)"
           printf '%s\n' "$NEXT" > VERSION
           # The baseline must hash the released content, so write it after
           # VERSION but from the same working tree that is about to be tagged.
           scripts/ci/write-baseline.sh "$NEXT"
-          scripts/ci/write-changelog.sh "$NEXT" "$prev_tag"
+          scripts/ci/write-changelog.sh "$NEXT" "$PREV_TAG"
 
       - name: Commit, then tag that commit
         if: steps.next.outputs.next != 'none'
@@ -89,26 +106,34 @@ jobs:
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add VERSION CHANGELOG.md "scripts/baselines/$NEXT.sha256"
-          git commit -m "chore(release): $NEXT [skip ci]"
 
-          # Push the commit before tagging it. Tagging first would produce a tag
-          # whose tree still holds the previous VERSION, so a consumer resolving
-          # the tag would download content that disagrees with the version they
-          # were told to expect.
-          #
-          # Another release may have landed while this job queued, so rebase and
-          # retry rather than failing the release outright.
-          attempt=1
-          until git push origin HEAD:main; do
-            if [ "$attempt" -ge 3 ]; then
-              echo "::error::Could not push the release commit after $attempt attempts."
-              exit 1
-            fi
-            echo "Push rejected; rebasing onto the latest main (attempt $attempt)."
-            git fetch origin main
-            git rebase origin/main
-            attempt=$((attempt + 1))
-          done
+          # On an initial release VERSION and the baseline are already correct
+          # in the tree, so there may be nothing to commit. That is not a
+          # failure - the tag still has to be created against this commit.
+          if git diff --cached --quiet; then
+            echo "Nothing to commit; tagging the current commit."
+          else
+            git commit -m "chore(release): $NEXT [skip ci]"
+
+            # Push the commit before tagging it. Tagging first would produce a
+            # tag whose tree still holds the previous VERSION, so a consumer
+            # resolving the tag would download content that disagrees with the
+            # version they were told to expect.
+            #
+            # Another release may have landed while this job queued, so rebase
+            # and retry rather than failing the release outright.
+            attempt=1
+            until git push origin HEAD:main; do
+              if [ "$attempt" -ge 3 ]; then
+                echo "::error::Could not push the release commit after $attempt attempts."
+                exit 1
+              fi
+              echo "Push rejected; rebasing onto the latest main (attempt $attempt)."
+              git fetch origin main
+              git rebase origin/main
+              attempt=$((attempt + 1))
+            done
+          fi
 
           git tag -a "v$NEXT" -m "v$NEXT" HEAD
           git push origin "v$NEXT"
