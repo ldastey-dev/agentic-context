@@ -126,9 +126,15 @@ touch_stamp() { date -u '+%Y-%m-%dT%H:%M:%SZ' > "$STAMP" 2>/dev/null || true; }
 # --- modes -----------------------------------------------------------------
 
 report_local_state() {
-  local diverged orphans
+  local diverged orphans override_count
   diverged="$(list_diverged)"
   orphans="$(list_orphan_overrides)"
+
+  override_count=0
+  if [ -d "$CONTEXT_DIR/overrides" ]; then
+    override_count="$(find "$CONTEXT_DIR/overrides" -type f -name '*.md' ! -name 'README.md' 2>/dev/null | wc -l | tr -d ' ')"
+  fi
+  [ "$override_count" -gt 0 ] && echo "  $override_count override file(s) active."
 
   if [ -n "$diverged" ]; then
     echo ""

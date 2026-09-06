@@ -184,7 +184,7 @@ promote() {
       printf 'overrides: %s\n' "$rel"
       printf 'mode: replace\n'
       printf -- '---\n\n'
-      printf '<!-- Promoted from a pre-2.0 deployment by migrate.sh.\n'
+      printf '<!-- Promoted from a pre-2.0 deployment by agentic-context migrate.\n'
       printf '     This was an edited copy of the framework file %s.\n' "$rel"
       printf '     Consider converting to "mode: extend" and keeping only your differences,\n'
       printf '     so you continue to inherit upstream improvements. -->\n\n'
@@ -224,6 +224,7 @@ for tool in update.sh update.ps1 migrate.sh migrate.ps1; do
   [ -f "$SOURCE_ROOT/scripts/$tool" ] && cp "$SOURCE_ROOT/scripts/$tool" "$CONTEXT_DIR/bin/$tool"
 done
 cp "$SOURCE_ROOT/scripts/lib/common.sh" "$CONTEXT_DIR/bin/lib/common.sh"
+[ -f "$SOURCE_ROOT/scripts/lib/common.ps1" ] && cp "$SOURCE_ROOT/scripts/lib/common.ps1" "$CONTEXT_DIR/bin/lib/common.ps1"
 chmod +x "$CONTEXT_DIR/bin"/*.sh 2>/dev/null || true
 
 # AGENTS.md: prepend the managed block, leave everything the consumer has intact.
@@ -248,7 +249,7 @@ if [ -f "$SOURCE_ROOT/core/AGENTS.md" ]; then
       ' "$SOURCE_ROOT/core/AGENTS.md" \
         | sed "1s|^<!-- agentic-context:begin.*|<!-- agentic-context:begin $NEW_VERSION -->|"
       printf '\n---\n\n'
-      printf '<!-- migrate.sh: everything below is your original AGENTS.md, unchanged.\n'
+      printf '<!-- agentic-context migrate: everything below is your original AGENTS.md, unchanged.\n'
       printf '     Framework content is now in the managed block above; delete any\n'
       printf '     duplicated sections below that the block already covers. -->\n\n'
       cat "$AGENTS_FILE"

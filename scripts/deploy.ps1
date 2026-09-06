@@ -550,11 +550,45 @@ if (-not (Test-Path $script:Target -PathType Container)) {
 # Content lives one level up: this script sits in scripts/, sources are at the repo root.
 $SourceRoot = Split-Path -Parent $PSScriptRoot
 
+. (Join-Path $PSScriptRoot 'lib/common.ps1')
+
+$DeployVersion = '0.0.0'
+$versionFile = Join-Path $SourceRoot 'VERSION'
+if (Test-Path -LiteralPath $versionFile) {
+    $candidate = ConvertTo-AcSemVer ((Get-Content -LiteralPath $versionFile -Raw))
+    if (Test-AcSemVer $candidate) { $DeployVersion = $candidate }
+}
+
 Write-Host "Deploying agent-contexts to $($script:Target)"
+Write-Host "  Version: $DeployVersion"
 Write-Host "  Selected agents: $($script:EnabledAgents -join ', ')"
 
 Write-Host "  Copying shared context files..."
-Copy-SingleFile -Source (Join-Path $SourceRoot 'core/AGENTS.md') -Destination (Join-Path $script:Target 'AGENTS.md')
+
+# AGENTS.md belongs to the consumer: it carries their [CONFIGURE] sections.
+# Only the managed block is ours, so refresh just that when it is present.
+$agentsSrc = Join-Path $SourceRoot 'core/AGENTS.md'
+$agentsDst = Join-Path $script:Target 'AGENTS.md'
+if (-not (Test-Path -LiteralPath $agentsDst)) {
+    $parent = Split-Path -Parent $agentsDst
+    if (-not (Test-Path -LiteralPath $parent)) {
+        New-Item -ItemType Directory -Path $parent -Force | Out-Null
+    }
+    $seeded = Get-Content -LiteralPath $agentsSrc | ForEach-Object {
+        if ($_.StartsWith('<!-- agentic-context:begin')) {
+            "<!-- agentic-context:begin $DeployVersion -->"
+        } else {
+            $_
+        }
+    }
+    Set-Content -LiteralPath $agentsDst -Value $seeded -Encoding UTF8
+} elseif (Test-AcManagedBlock -Path $agentsDst) {
+    Update-AcManagedBlock -Source $agentsSrc -Destination $agentsDst -Version $DeployVersion
+    Write-Host "    AGENTS.md: refreshed managed block (your content preserved)"
+} else {
+    Copy-SingleFile -Source $agentsSrc -Destination $agentsDst
+}
+
 Copy-DirectoryContents -Source (Join-Path $SourceRoot 'core/.context') -Destination (Join-Path $script:Target '.context')
 
 if (Test-AgentEnabled 'claude') {
@@ -631,6 +665,41 @@ if ((Test-AgentEnabled 'claude') -or (Test-AgentEnabled 'copilot')) {
     Write-Host "  Skipping skill wrapper generation (no selected agent uses skills)."
 }
 
+# Consumer-owned override tree. Created here; never touched again by update.
+Write-Host "  Creating override layer -> $(Join-Path $script:Target '.context/overrides')"
+$overrideDst = Join-Path $script:Target '.context/overrides'
+if (-not (Test-Path -LiteralPath $overrideDst)) {
+    New-Item -ItemType Directory -Path $overrideDst -Force | Out-Null
+}
+Copy-DirectoryContents -Source (Join-Path $SourceRoot 'core/.context/overrides') -Destination $overrideDst
+
+# Update tooling, shipped into the target so it can maintain itself.
+Write-Host "  Installing update tooling -> $(Join-Path $script:Target '.context/bin')"
+$binDst = Join-Path $script:Target '.context/bin'
+$binLibDst = Join-Path $binDst 'lib'
+foreach ($dir in @($binDst, $binLibDst)) {
+    if (-not (Test-Path -LiteralPath $dir)) {
+        New-Item -ItemType Directory -Path $dir -Force | Out-Null
+    }
+}
+foreach ($tool in @('update.sh', 'update.ps1', 'migrate.sh', 'migrate.ps1')) {
+    $toolSrc = Join-Path $SourceRoot "scripts/$tool"
+    if (Test-Path -LiteralPath $toolSrc) {
+        Copy-Item -LiteralPath $toolSrc -Destination (Join-Path $binDst $tool) -Force
+    }
+}
+foreach ($libFile in @('common.sh', 'common.ps1')) {
+    $libSrc = Join-Path $SourceRoot "scripts/lib/$libFile"
+    if (Test-Path -LiteralPath $libSrc) {
+        Copy-Item -LiteralPath $libSrc -Destination (Join-Path $binLibDst $libFile) -Force
+    }
+}
+
+Set-Content -LiteralPath (Join-Path $script:Target '.context/VERSION') -Value $DeployVersion -Encoding UTF8
+
+Write-Host "  Writing manifest -> $(Join-Path $script:Target '.context/manifest.json')"
+Write-AcManifest -ContextDir (Join-Path $script:Target '.context') -Version $DeployVersion -Agents $script:EnabledAgents
+
 Write-Host ""
 Write-Host "Done. Next steps:"
 $step = 1
@@ -650,6 +719,16 @@ if (Test-AgentEnabled 'claude') {
 
 if (Test-AgentEnabled 'copilot') {
     Show-NextStep "Review $($script:Target)\.github\copilot-instructions.md"
+}
+
+Show-NextStep "Never edit .context/standards|playbooks|conventions directly - use .context/overrides/ (see .context/overrides/README.md)"
+
+# Report staleness on every deploy. Fails open and never blocks.
+$latest = Get-AcLatestVersion
+if ($latest -and (Test-AcSemVerGreater $latest $DeployVersion)) {
+    Write-Host ""
+    Write-Host "  Note: you deployed $DeployVersion but $latest is available upstream."
+    Write-Host "        Pull the latest agentic-context and re-run this script."
 }
 
 if ($script:SkippedFiles.Count -gt 0) {

@@ -777,6 +777,7 @@ for tool in update.sh update.ps1 migrate.sh migrate.ps1; do
 done
 mkdir -p "$TARGET/.context/bin/lib"
 cp "$SOURCE_ROOT/scripts/lib/common.sh" "$TARGET/.context/bin/lib/common.sh"
+[[ -f "$SOURCE_ROOT/scripts/lib/common.ps1" ]] && cp "$SOURCE_ROOT/scripts/lib/common.ps1" "$TARGET/.context/bin/lib/common.ps1"
 chmod +x "$TARGET/.context/bin"/*.sh 2>/dev/null || true
 
 printf '%s\n' "$DEPLOY_VERSION" > "$TARGET/.context/VERSION"

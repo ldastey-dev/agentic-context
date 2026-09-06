@@ -35,8 +35,15 @@ Describe 'deploy.ps1 (PowerShell version/platform compatibility)' {
     # TC5 in scripts/tests/test-deploy.ps1 exist separately.
     It 'has no PSScriptAnalyzer compatibility findings for Windows PowerShell 5.1 / PowerShell 7.0' -Skip:(-not $script:PSScriptAnalyzerAvailable) {
         Import-Module PSScriptAnalyzer
-        $results = Invoke-ScriptAnalyzer -Path (Join-Path $PSScriptRoot 'deploy.ps1') -Settings (Join-Path (Split-Path -Parent $PSScriptRoot) 'PSScriptAnalyzerSettings.psd1')
-        $results | Should -BeNullOrEmpty
+        $settings = Join-Path (Split-Path -Parent $PSScriptRoot) 'PSScriptAnalyzerSettings.psd1'
+        $targets = @('deploy.ps1', 'update.ps1', 'migrate.ps1', 'lib/common.ps1')
+        $findings = @()
+        foreach ($target in $targets) {
+            $path = Join-Path $PSScriptRoot $target
+            if (-not (Test-Path -LiteralPath $path)) { continue }
+            $findings += Invoke-ScriptAnalyzer -Path $path -Settings $settings
+        }
+        $findings | Should -BeNullOrEmpty
     }
 }
 
