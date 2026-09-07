@@ -225,7 +225,6 @@ interactive_select_agents() {
 
   while true; do
     key=""
-    sequence=""
     IFS= read -rsn1 key || true
 
     if [[ "$key" == $'\x1b' ]]; then
@@ -605,6 +604,15 @@ if agent_enabled claude || agent_enabled copilot; then
     filename=$(basename "$playbook")
     generate_skills_for_selected_agents "$playbook" "refactor/$filename"
   done
+
+  if [[ -d "$SCRIPT_DIR/playbooks/debug" ]]; then
+    for playbook in "$SCRIPT_DIR"/playbooks/debug/*.md; do
+      [[ -f "$playbook" ]] || continue
+      filename=$(basename "$playbook")
+      generate_skills_for_selected_agents "$playbook" "debug/$filename" \
+        "Read, Grep, Glob, Bash, Write, Edit, Agent"
+    done
+  fi
 
   if [[ -d "$SCRIPT_DIR/playbooks/docs" ]]; then
     for playbook in "$SCRIPT_DIR"/playbooks/docs/*.md; do
