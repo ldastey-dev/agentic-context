@@ -1,0 +1,92 @@
+name: Publish MCP Server to npm
+
+# Publishes the `agentic-context-mcp` package (in mcp-server/) to npm whenever
+# a tag matching `mcp-v*` is pushed, e.g. `mcp-v0.2.0`.
+#
+# Uses npm Trusted Publishing (OIDC) — no NPM_TOKEN secret required. This
+# requires one-time setup by whoever owns the `agentic-context-mcp` package
+# on npmjs.com, which cannot be done from this workflow file alone:
+#
+#   1. The package must already exist on npm. If it has never been published,
+#      the very first publish must be done manually from a maintainer's
+#      machine (`cd mcp-server && npm publish`), since a Trusted Publisher
+#      can only be configured for a package that already exists.
+#   2. On npmjs.com, go to the package's Settings > Trusted Publisher, choose
+#      "GitHub Actions", and set:
+#        - Organization or user: the GitHub org/user owning this repo
+#        - Repository:           this repository's name
+#        - Workflow filename:    publish-mcp-server.yml   (filename only)
+#        - Environment name:     leave blank unless using a GitHub Environment
+#   3. That's it — no GitHub secret needs to be added. Once configured, any
+#      push of a `mcp-v*` tag from this workflow is authenticated via a
+#      short-lived OIDC token, and npm publishes provenance automatically.
+#
+# See mcp-server/README.md's "Publishing a new version" section for the full
+# release process (bumping the version, tagging, etc.).
+
+on:
+  push:
+    tags:
+      - "mcp-v*"
+
+permissions:
+  contents: read
+  id-token: write # required for npm Trusted Publishing (OIDC)
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: mcp-server
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "lts/*"
+          registry-url: "https://registry.npmjs.org"
+
+      - name: Ensure npm supports Trusted Publishing (>= 11.5.1)
+        run: npm install -g npm@latest
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: Test
+        run: npm test
+
+      - name: Verify tag matches package.json version
+        run: |
+          TAG_VERSION="${GITHUB_REF_NAME#mcp-v}"
+          PKG_VERSION=$(node -p "require('./package.json').version")
+          if [ "$TAG_VERSION" != "$PKG_VERSION" ]; then
+            echo "Tag mcp-v$TAG_VERSION does not match package.json version $PKG_VERSION"
+            exit 1
+          fi
+
+      - name: Determine npm dist-tag
+        id: npm-tag
+        run: |
+          # npm refuses to guess a dist-tag for prerelease versions (anything
+          # with a "-" per semver, e.g. 0.1.0-beta.1) — it must be explicit,
+          # or `npm publish` errors out. Derive it from the prerelease
+          # identifier (e.g. "beta" from "0.1.0-beta.1"); plain releases get
+          # "latest".
+          VERSION=$(node -p "require('./package.json').version")
+          if [[ "$VERSION" == *-* ]]; then
+            TAG="${VERSION#*-}"
+            TAG="${TAG%%.*}"
+          else
+            TAG="latest"
+          fi
+          echo "Publishing $VERSION with dist-tag: $TAG"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+
+      - name: Publish to npm
+        run: npm publish --provenance --access public --tag "${{ steps.npm-tag.outputs.tag }}"
