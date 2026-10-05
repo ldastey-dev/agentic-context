@@ -32,11 +32,18 @@ Describe 'deploy.ps1 (PowerShell version/platform compatibility)' {
     # isn't installed locally; run `Install-Module PSScriptAnalyzer -Scope CurrentUser` to enable
     # it. This is a static check - it does not catch semantic/runtime issues like Add-Type
     # resetting [Environment]::CurrentDirectory, which is why the compatibility test above and
-    # TC5 in tests/test-deploy.ps1 exist separately.
+    # TC5 in scripts/tests/test-deploy.ps1 exist separately.
     It 'has no PSScriptAnalyzer compatibility findings for Windows PowerShell 5.1 / PowerShell 7.0' -Skip:(-not $script:PSScriptAnalyzerAvailable) {
         Import-Module PSScriptAnalyzer
-        $results = Invoke-ScriptAnalyzer -Path (Join-Path $PSScriptRoot 'deploy.ps1') -Settings (Join-Path $PSScriptRoot 'PSScriptAnalyzerSettings.psd1')
-        $results | Should -BeNullOrEmpty
+        $settings = Join-Path (Split-Path -Parent $PSScriptRoot) 'PSScriptAnalyzerSettings.psd1'
+        $targets = @('deploy.ps1', 'update.ps1', 'migrate.ps1', 'lib/common.ps1')
+        $findings = @()
+        foreach ($target in $targets) {
+            $path = Join-Path $PSScriptRoot $target
+            if (-not (Test-Path -LiteralPath $path)) { continue }
+            $findings += Invoke-ScriptAnalyzer -Path $path -Settings $settings
+        }
+        $findings | Should -BeNullOrEmpty
     }
 }
 
@@ -190,5 +197,140 @@ Describe 'Copy-SingleFile' {
         $result | Should -Be "line1`nline2`n"
         $firstBytes = [System.IO.File]::ReadAllBytes($dst)
         $firstBytes[0] | Should -Not -Be 0xEF
+    }
+}
+
+Describe 'Get-AcFileHashLf' {
+    BeforeAll {
+        . (Join-Path (Split-Path -Parent $PSScriptRoot) 'scripts/lib/common.ps1')
+        $script:LfTmp = Join-Path ([System.IO.Path]::GetTempPath()) ("ac-lf-" + [guid]::NewGuid())
+        New-Item -ItemType Directory -Path $script:LfTmp -Force | Out-Null
+    }
+    AfterAll {
+        if (Test-Path -LiteralPath $script:LfTmp) { Remove-Item -LiteralPath $script:LfTmp -Recurse -Force }
+    }
+
+    # Baselines are generated on LF checkouts. Hashing a CRLF working tree
+    # byte-for-byte reports every file as edited, which made migrate promote a
+    # pristine deployment wholesale into "mode: replace" overrides - a silent
+    # permanent fork. The LF and CRLF forms of the same content must agree.
+    It 'returns the same hash for LF and CRLF forms of identical content' {
+        $lf = Join-Path $script:LfTmp 'lf.md'
+        $crlf = Join-Path $script:LfTmp 'crlf.md'
+        [System.IO.File]::WriteAllText($lf, "line one`nline two`n")
+        [System.IO.File]::WriteAllText($crlf, "line one`r`nline two`r`n")
+
+        Get-AcFileHashLf -Path $crlf | Should -Be (Get-AcFileHashLf -Path $lf)
+    }
+
+    # The byte-exact hash must still distinguish them, because manifest hashes
+    # rely on it for local change detection.
+    It 'differs from the byte-exact hash for CRLF content' {
+        $crlf = Join-Path $script:LfTmp 'crlf2.md'
+        [System.IO.File]::WriteAllText($crlf, "line one`r`nline two`r`n")
+
+        Get-AcFileHashLf -Path $crlf | Should -Not -Be (Get-AcFileHash -Path $crlf)
+    }
+
+    It 'still detects genuinely different content' {
+        $a = Join-Path $script:LfTmp 'a.md'
+        $b = Join-Path $script:LfTmp 'b.md'
+        [System.IO.File]::WriteAllText($a, "alpha`n")
+        [System.IO.File]::WriteAllText($b, "beta`n")
+
+        Get-AcFileHashLf -Path $a | Should -Not -Be (Get-AcFileHashLf -Path $b)
+    }
+}
+
+Describe 'migrate.ps1 (consumer content preservation)' {
+    BeforeAll {
+        $script:RepoRoot = Split-Path -Parent $PSScriptRoot
+        $script:MigTmp = Join-Path ([System.IO.Path]::GetTempPath()) ("ac-mig-" + [guid]::NewGuid())
+        New-Item -ItemType Directory -Path (Join-Path $script:MigTmp '.context/standards') -Force | Out-Null
+
+        Copy-Item -LiteralPath (Join-Path $script:RepoRoot 'standards/security.md') `
+            -Destination (Join-Path $script:MigTmp '.context/standards/security.md')
+        Add-Content -LiteralPath (Join-Path $script:MigTmp '.context/standards/security.md') -Value 'MY LOCAL EDIT'
+        Set-Content -LiteralPath (Join-Path $script:MigTmp '.context/standards/my-own.md') -Value 'mine'
+        Set-Content -LiteralPath (Join-Path $script:MigTmp '.context/standards/fixture.json') -Value '{"k":1}'
+
+        & pwsh -NoProfile -File (Join-Path $script:RepoRoot 'scripts/migrate.ps1') `
+            -Target $script:MigTmp -Apply 2>&1 | Out-Null
+    }
+    AfterAll {
+        if (Test-Path -LiteralPath $script:MigTmp) { Remove-Item -LiteralPath $script:MigTmp -Recurse -Force }
+    }
+
+    It 'promotes an edited base file into overrides with its content intact' {
+        $o = Join-Path $script:MigTmp '.context/overrides/standards/security.md'
+        Test-Path -LiteralPath $o | Should -BeTrue
+        (Get-Content -LiteralPath $o -Raw) | Should -Match 'MY LOCAL EDIT'
+    }
+
+    It 'marks a promoted override with mode: replace' {
+        (Get-Content -LiteralPath (Join-Path $script:MigTmp '.context/overrides/standards/security.md') -Raw) |
+            Should -Match 'mode: replace'
+    }
+
+    It 'preserves a consumer-added markdown file' {
+        Test-Path -LiteralPath (Join-Path $script:MigTmp '.context/overrides/standards/my-own.md') |
+            Should -BeTrue
+    }
+
+    # The restore deletes each area wholesale, so a non-markdown file the
+    # consumer added is destroyed unless it is classified and moved out first.
+    # The baseline only covers *.md, so this needed handling separately.
+    It 'preserves a consumer-added non-markdown file' {
+        Test-Path -LiteralPath (Join-Path $script:MigTmp '.context/overrides/standards/fixture.json') |
+            Should -BeTrue
+    }
+
+    It 'restores the base file pristine' {
+        $b = Join-Path $script:MigTmp '.context/standards/security.md'
+        Test-Path -LiteralPath $b | Should -BeTrue
+        (Get-Content -LiteralPath $b -Raw) | Should -Not -Match 'MY LOCAL EDIT'
+    }
+}
+
+Describe 'deploy.ps1 (override layer ownership)' {
+    BeforeAll {
+        $script:OvRepo = Split-Path -Parent $PSScriptRoot
+        $script:OvTmp = Join-Path ([System.IO.Path]::GetTempPath()) ("ac-ov-" + [guid]::NewGuid())
+        $deploy = Join-Path $script:OvRepo 'scripts/deploy.ps1'
+        New-Item -ItemType Directory -Path $script:OvTmp -Force | Out-Null
+
+        & pwsh -NoProfile -File $deploy -Target $script:OvTmp -Agents claude -Overwrite 2>&1 | Out-Null
+        Set-Content -LiteralPath (Join-Path $script:OvTmp '.context/overrides/README.md') -Value 'MY OWN OVERRIDE NOTES'
+        Set-Content -LiteralPath (Join-Path $script:OvTmp '.context/overrides/standards/security.md') -Value 'my custom rule'
+        Set-Content -LiteralPath (Join-Path $script:OvTmp '.context/standards/security.md') -Value 'tampered'
+        & pwsh -NoProfile -File $deploy -Target $script:OvTmp -Agents claude -Overwrite 2>&1 | Out-Null
+    }
+    AfterAll {
+        if (Test-Path -LiteralPath $script:OvTmp) { Remove-Item -LiteralPath $script:OvTmp -Recurse -Force }
+    }
+
+    # The override tree is consumer-owned; the base is disposable only because
+    # the framework never writes there. Scaffolding was previously copied with
+    # the normal overwrite rules, which destroyed a consumer's own README.
+    It 'preserves a consumer-edited overrides README under -Overwrite' {
+        (Get-Content -LiteralPath (Join-Path $script:OvTmp '.context/overrides/README.md') -Raw) |
+            Should -Match 'MY OWN OVERRIDE NOTES'
+    }
+
+    It 'preserves a consumer override file under -Overwrite' {
+        (Get-Content -LiteralPath (Join-Path $script:OvTmp '.context/overrides/standards/security.md') -Raw) |
+            Should -Match 'my custom rule'
+    }
+
+    # Get-ChildItem skips dotfiles without -Force, so the .gitkeep scaffolding
+    # was silently never deployed, diverging from deploy.sh.
+    It 'seeds the override scaffolding including dotfiles' {
+        Test-Path -LiteralPath (Join-Path $script:OvTmp '.context/overrides/playbooks/.gitkeep') |
+            Should -BeTrue
+    }
+
+    It 'still refreshes base content under -Overwrite' {
+        (Get-Content -LiteralPath (Join-Path $script:OvTmp '.context/standards/security.md') -Raw) |
+            Should -Not -Match '^tampered'
     }
 }

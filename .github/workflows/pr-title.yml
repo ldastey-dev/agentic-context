@@ -1,0 +1,55 @@
+name: PR title
+
+# The release job derives the version bump size from the merge commit subject,
+# which is the pull request title when a PR is squashed. If the title is not a
+# valid Conventional Commit the bump cannot be derived, so the title is checked
+# on every pull request rather than discovered at merge time.
+on:
+  pull_request:
+    types: [opened, edited, reopened, synchronize]
+
+concurrency:
+  group: pr-title-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions:
+  pull-requests: read
+
+jobs:
+  lint:
+    name: Conventional Commit title
+    runs-on: ubuntu-latest
+    steps:
+      # Pinned to a full commit SHA, not a mutable tag: a compromised or
+      # retargeted "v5" tag would otherwise execute here. Dependabot raises the
+      # upgrade, so pinning costs nothing in currency.
+      - uses: amannn/action-semantic-pull-request@0723387faaf9b38adef4775cd42cfd5155ed6017 # v5.5.3
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          # This list is PR hygiene, not the bump decision. It keeps changelog
+          # groups meaningful by rejecting invented types before merge.
+          #
+          # next-version.sh deliberately does NOT share this list: it applies a
+          # patch floor to any unrecognised type, so a deployable change that
+          # reaches main by some route this lint never saw - a direct push, or
+          # a non-squash merge - still cuts a release instead of being lost.
+          # The lint prevents unknown types; the floor makes them harmless.
+          types: |
+            feat
+            fix
+            docs
+            style
+            refactor
+            perf
+            test
+            build
+            ci
+            chore
+            revert
+          requireScope: false
+          # A single-line subject keeps the squashed commit parseable.
+          subjectPattern: ^(?![A-Z])(?!.*\.$).+$
+          subjectPatternError: |
+            The subject "{subject}" is invalid: it must start with a lower-case
+            letter and must not end with a full stop.

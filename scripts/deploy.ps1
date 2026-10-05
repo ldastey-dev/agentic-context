@@ -1,0 +1,899 @@
+<#
+.SYNOPSIS
+    Deploy agent-contexts templates to a target repository.
+
+.DESCRIPTION
+    Copies shared engineering standards and agent-specific configuration files
+    (for Claude Code, GitHub Copilot, Cursor, Devin, and Windsurf) to target
+    repositories. Generates skill wrapper SKILL.md files from playbooks for
+    Claude Code and GitHub Copilot.
+
+.PARAMETER Agents
+    One or more agents to deploy: claude, copilot, cursor, devin, windsurf, all.
+    If omitted in an interactive terminal, a selection menu is shown.
+
+.PARAMETER TargetRepo
+    Target repository path. Defaults to the current directory.
+
+.PARAMETER Overwrite
+    Overwrite all existing files without prompting.
+
+.PARAMETER NoOverwrite
+    Skip all existing files without prompting.
+
+.EXAMPLE
+    .\deploy.ps1 -Agents claude,copilot
+    .\deploy.ps1 -Agents claude copilot
+    .\deploy.ps1 -Agents "claude copilot windsurf"
+    .\deploy.ps1 -Agents all -TargetRepo C:\repos\my-project
+    .\deploy.ps1
+    .\deploy.ps1 -Agents all -TargetRepo C:\repos\my-project -NoOverwrite
+#>
+[CmdletBinding()]
+param(
+    [string[]]$Agents,
+    [string]$TargetRepo,
+    [switch]$Help,
+    [switch]$Overwrite,
+    [switch]$NoOverwrite,
+    [Parameter(ValueFromRemainingArguments = $true)]
+    [string[]]$RemainingAgents
+)
+
+$ErrorActionPreference = 'Stop'
+
+if ($RemainingAgents) {
+    $Agents = @($Agents) + @($RemainingAgents)
+}
+if ($Agents) {
+    $Agents = @($Agents | ForEach-Object { $_ -split '[\s,]+' } | Where-Object { $_ -ne '' })
+}
+
+$ValidAgents = @('claude', 'copilot', 'cursor', 'devin', 'windsurf')
+$script:EnabledAgents = @()
+$script:OverwriteMode = ""    # "all" | "none" | "" (prompt per-file)
+$script:SkippedFiles = @()
+
+# ---------------------------------------------------------------------------
+# Helper functions
+# ---------------------------------------------------------------------------
+
+function Show-Usage {
+    Write-Host @"
+Usage: .\deploy.ps1 -Agents <agent ...|all> [-TargetRepo <path>]
+
+Copy agent-contexts templates to a target repository and generate skill wrappers.
+If -TargetRepo is omitted, deploys to the current directory.
+
+Shared content (always copied):
+  AGENTS.md                         -> target repo root
+  .context\                         -> target .context\ (index + conventions)
+  standards\                        -> target .context\standards\
+  playbooks\                        -> target .context\playbooks\
+
+Agent-specific files (copied only for selected agents):
+  claude     -> CLAUDE.md, .claude\settings.json, .claude\skills\
+  copilot    -> .github\copilot-instructions.md, .github\skills\
+  cursor     -> .cursor\rules\standards.mdc
+  devin      -> .devin\devin.json
+  windsurf   -> .windsurfrules
+  all        -> all of the above
+
+Parameters:
+  -Agents      Mandatory in non-interactive mode. Accepts one or more values:
+               claude copilot cursor devin windsurf all
+  -TargetRepo  Target directory (default: current directory)
+  -Overwrite     Overwrite all existing files without prompting
+  -NoOverwrite   Skip all existing files without prompting
+                 Default: prompt per-file when conflicts are detected
+  -Help        Show this help message and exit
+"@
+}
+
+function Print-Banner {
+    Write-Host "         __" -ForegroundColor Cyan
+    Write-Host " _(\    |@@|" -ForegroundColor Cyan
+    Write-Host "(__/\__ \--/ __" -ForegroundColor Cyan
+    Write-Host "   \___|----|  |   __" -ForegroundColor Cyan
+    Write-Host "       \ }{ /\ )_ / _\" -ForegroundColor Cyan
+    Write-Host "       /\__/\ \__O (__" -ForegroundColor Cyan
+    Write-Host "      (--/\--)    \__/" -ForegroundColor Cyan
+    Write-Host "      _)(  )(_" -ForegroundColor Cyan
+    Write-Host "     ``---''---``" -ForegroundColor Cyan
+    Write-Host "A comprehensive list of engineering standards for context engineering with AI Agents" -ForegroundColor Yellow
+    Write-Host "https://github.com/ldastey-dev/agentic-context" -ForegroundColor Cyan
+    Write-Host "Written by Leigh Dastey" -ForegroundColor Magenta
+    Write-Host ""
+}
+
+function Test-AgentEnabled {
+    param([string]$Agent)
+    return ($script:EnabledAgents -contains $Agent)
+}
+
+function Confirm-Overwrite {
+    param([string]$Destination)
+
+    # New files always proceed
+    if (-not (Test-Path $Destination)) {
+        return $true
+    }
+
+    switch ($script:OverwriteMode) {
+        "all"  { return $true }
+        "none" {
+            $script:SkippedFiles += $Destination
+            return $false
+        }
+    }
+
+    # Non-interactive -> safe default (skip)
+    $isInteractive = $false
+    try {
+        $isInteractive = [Environment]::UserInteractive -and -not [Console]::IsInputRedirected
+    } catch { }
+
+    if (-not $isInteractive) {
+        Write-Host "  Skipping existing file (non-interactive): $Destination"
+        $script:SkippedFiles += $Destination
+        return $false
+    }
+
+    while ($true) {
+        Write-Host "  File already exists: $Destination"
+        $answer = Read-Host "  Overwrite? [y]es / [n]o / [N]o to all / [a]ll"
+        switch ($answer) {
+            'y' { return $true }
+            'n' { $script:SkippedFiles += $Destination; return $false }
+            'N' { $script:OverwriteMode = "none"; $script:SkippedFiles += $Destination; return $false }
+            'a' { $script:OverwriteMode = "all"; return $true }
+            default { Write-Host "  Please enter y, n, N, or a." }
+        }
+    }
+}
+
+$script:TextExtensions = @('.md', '.json', '.mdc', '.txt', '.yaml', '.yml', '.toml', '.ini')
+
+function Test-IsUtf8Compatible {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [string]$Path
+    )
+    $resolvedPath = [System.IO.Path]::GetFullPath($Path)
+    try {
+        $bom = [byte[]]::new(4)
+        $stream = [System.IO.File]::OpenRead($resolvedPath)
+        try { $read = $stream.Read($bom, 0, 4) }
+        finally { $stream.Close() }
+        # UTF-32 must be tested before UTF-16 (shares FF FE prefix)
+        if ($read -ge 4 -and $bom[0] -eq 0xFF -and $bom[1] -eq 0xFE -and $bom[2] -eq 0x00 -and $bom[3] -eq 0x00) { return $false } # UTF-32 LE
+        if ($read -ge 4 -and $bom[0] -eq 0x00 -and $bom[1] -eq 0x00 -and $bom[2] -eq 0xFE -and $bom[3] -eq 0xFF) { return $false } # UTF-32 BE
+        if ($read -ge 2 -and $bom[0] -eq 0xFF -and $bom[1] -eq 0xFE) { return $false }                                              # UTF-16 LE
+        if ($read -ge 2 -and $bom[0] -eq 0xFE -and $bom[1] -eq 0xFF) { return $false }                                              # UTF-16 BE
+        return $true
+    } catch {
+        Write-Warning "Test-IsUtf8Compatible: could not read '$resolvedPath' - $_. Falling back to Copy-Item."
+        return $false
+    }
+}
+
+function Copy-SingleFile {
+    [CmdletBinding()]
+    param([string]$Source, [string]$Destination)
+    $ext = [System.IO.Path]::GetExtension($Source).ToLowerInvariant()
+    $isText = ($ext -in $script:TextExtensions) -and (Test-IsUtf8Compatible -Path $Source)
+    $content = $null
+    if ($isText) {
+        # ANSI/Windows-1252 files without a BOM are indistinguishable from UTF-8 at the header level and will pass
+        # Test-IsUtf8Compatible; characters above U+007F may be silently replaced. All repo source files are UTF-8.
+        $content = [System.IO.File]::ReadAllText($Source, [System.Text.Encoding]::UTF8) -replace "`r`n", "`n" -replace "`r", "`n"
+    }
+    # Identical content needs no decision. Without this, redeploying the same
+    # version prompts once for every file in the library, and a non-interactive
+    # redeploy lists them all as "skipped" when nothing would have changed.
+    if (Test-Path -LiteralPath $Destination -PathType Leaf) {
+        $destFull = [System.IO.Path]::GetFullPath($Destination)
+        if ($isText) {
+            $existing = [System.IO.File]::ReadAllText($destFull, [System.Text.Encoding]::UTF8) -replace "`r`n", "`n"
+            if ($existing -ceq $content) { return }
+        } elseif ((Get-FileHash -LiteralPath $Source -Algorithm SHA256).Hash -eq (Get-FileHash -LiteralPath $destFull -Algorithm SHA256).Hash) {
+            return
+        }
+    }
+    if (-not (Confirm-Overwrite -Destination $Destination)) {
+        return
+    }
+    $parentDir = Split-Path $Destination -Parent
+    if (-not (Test-Path $parentDir)) {
+        New-Item -ItemType Directory -Path $parentDir -Force | Out-Null
+    }
+    if ($isText) {
+        [System.IO.File]::WriteAllText($Destination, $content, (New-Object System.Text.UTF8Encoding($false)))
+    } else {
+        Copy-Item -Path $Source -Destination $Destination -Force
+    }
+}
+
+function Copy-DirectoryContents {
+    param([string]$Source, [string]$Destination)
+    if (-not (Test-Path $Destination)) {
+        New-Item -ItemType Directory -Path $Destination -Force | Out-Null
+    }
+    # -Force is required or dotfiles are skipped: the override scaffolding
+    # ships .gitkeep files, and without this the subdirectories are never
+    # created, diverging from deploy.sh.
+    $sourceFiles = Get-ChildItem -Path $Source -Recurse -File -Force
+    foreach ($file in $sourceFiles) {
+        $relativePath = $file.FullName.Substring($Source.TrimEnd('/\').Length + 1)
+        $destPath = Join-Path $Destination $relativePath
+        Copy-SingleFile -Source $file.FullName -Destination $destPath
+    }
+}
+
+# Seed files only where absent, ignoring -Overwrite entirely.
+#
+# The override tree is consumer-owned: the whole architecture depends on the
+# framework never writing there, because that is what makes the base
+# disposable. Copy-SingleFile honours -Overwrite, so using it for the override
+# scaffolding would let a redeploy destroy a consumer's own README - the very
+# file where they document why their overrides exist.
+function Copy-AcSeedContents {
+    param([string]$Source, [string]$Destination)
+    if (-not (Test-Path $Destination)) {
+        New-Item -ItemType Directory -Path $Destination -Force | Out-Null
+    }
+    # -Force is required or dotfiles are skipped: the override scaffolding
+    # ships .gitkeep files, and without this the subdirectories are never
+    # created, diverging from deploy.sh.
+    $sourceFiles = Get-ChildItem -Path $Source -Recurse -File -Force
+    foreach ($file in $sourceFiles) {
+        $relativePath = $file.FullName.Substring($Source.TrimEnd('/\').Length + 1)
+        $destPath = Join-Path $Destination $relativePath
+        if (Test-Path -LiteralPath $destPath) { continue }
+        $parent = Split-Path -Parent $destPath
+        if (-not (Test-Path -LiteralPath $parent)) {
+            New-Item -ItemType Directory -Path $parent -Force | Out-Null
+        }
+        Copy-Item -LiteralPath $file.FullName -Destination $destPath -Force
+    }
+}
+
+# Copy core/.context but skip the override subtree, which is seeded separately
+# and must never be overwritten.
+function Copy-AcContextExcludingOverrides {
+    param([string]$Source, [string]$Destination)
+    if (-not (Test-Path $Destination)) {
+        New-Item -ItemType Directory -Path $Destination -Force | Out-Null
+    }
+    # -Force is required or dotfiles are skipped: the override scaffolding
+    # ships .gitkeep files, and without this the subdirectories are never
+    # created, diverging from deploy.sh.
+    $sourceFiles = Get-ChildItem -Path $Source -Recurse -File -Force
+    foreach ($file in $sourceFiles) {
+        $relativePath = $file.FullName.Substring($Source.TrimEnd('/\').Length + 1)
+        if ($relativePath.Replace('\', '/') -like 'overrides/*') { continue }
+        $destPath = Join-Path $Destination $relativePath
+        Copy-SingleFile -Source $file.FullName -Destination $destPath
+    }
+}
+
+function Enable-VirtualTerminal {
+    # Returns $true if ANSI escape sequences are usable on stdout. On non-Windows
+    # hosts this is always true; on Windows it requires ENABLE_VIRTUAL_TERMINAL_PROCESSING,
+    # which we set via kernel32!SetConsoleMode. Returns $false if the API isn't
+    # available (e.g. constrained language mode) or the call fails - callers should
+    # refuse to render ANSI in that case rather than print literal escape text.
+    $onWindows = ($PSVersionTable.PSVersion.Major -le 5) -or $IsWindows
+    if (-not $onWindows) { return $true }
+
+    try {
+        if (-not ('AgenticContext.NativeConsole' -as [type])) {
+            Add-Type -Namespace AgenticContext -Name NativeConsole -MemberDefinition @'
+[System.Runtime.InteropServices.DllImport("kernel32.dll", SetLastError = true)]
+public static extern System.IntPtr GetStdHandle(int nStdHandle);
+[System.Runtime.InteropServices.DllImport("kernel32.dll", SetLastError = true)]
+public static extern bool GetConsoleMode(System.IntPtr hConsoleHandle, out uint lpMode);
+[System.Runtime.InteropServices.DllImport("kernel32.dll", SetLastError = true)]
+public static extern bool SetConsoleMode(System.IntPtr hConsoleHandle, uint dwMode);
+'@
+            # Add-Type compiles the above via an external process, which resets
+            # [Environment]::CurrentDirectory (observed jumping to C:\WINDOWS\System32) as a
+            # side effect. Restore it so relative-path .NET file I/O elsewhere in the script
+            # keeps resolving against PowerShell's actual working directory.
+            [System.Environment]::CurrentDirectory = (Get-Location).Path
+        }
+
+        $STD_OUTPUT_HANDLE = -11
+        $ENABLE_VIRTUAL_TERMINAL_PROCESSING = 0x4
+
+        $stdOut = [AgenticContext.NativeConsole]::GetStdHandle($STD_OUTPUT_HANDLE)
+        $mode = 0
+        if ([AgenticContext.NativeConsole]::GetConsoleMode($stdOut, [ref]$mode)) {
+            return [AgenticContext.NativeConsole]::SetConsoleMode($stdOut, $mode -bor $ENABLE_VIRTUAL_TERMINAL_PROCESSING)
+        }
+        return $false
+    } catch {
+        return $false
+    }
+}
+
+function Render-AgentMenu {
+    param(
+        [string[]]$Options,
+        [int[]]$Selected,
+        [int]$Cursor,
+        [string]$StatusMessage,
+        [bool]$FirstRender
+    )
+
+    $esc = [char]27
+    $linesDrawn = $Options.Count + 1   # menu rows + status row
+
+    if (-not $FirstRender) {
+        [Console]::Write("$esc[${linesDrawn}A")
+    }
+
+    for ($i = 0; $i -lt $Options.Count; $i++) {
+        $pointer = "  "
+        $marker = "[ ]"
+        if ($i -eq $Cursor) { $pointer = "> " }
+        if ($Selected[$i] -eq 1) { $marker = "[x]" }
+
+        $line = "$pointer$marker $($Options[$i])"
+
+        if ($i -eq $Cursor) {
+            [Console]::Write("`r$esc[2K$esc[32m$line$esc[0m`n")
+        } else {
+            [Console]::Write("`r$esc[2K$line`n")
+        }
+    }
+
+    [Console]::Write("`r$esc[2K$StatusMessage`n")
+}
+
+function Select-AgentsInteractive {
+    if (-not (Enable-VirtualTerminal)) {
+        Write-Error "Interactive menu unavailable: virtual-terminal mode could not be enabled. Re-run with -Agents <list>."
+        exit 1
+    }
+
+    $options = @('all') + $ValidAgents + @('clear and exit')
+    $optionsCount = $options.Count
+    $exitIndex = $optionsCount - 1
+    $selected = @(0) * $optionsCount
+    $cursor = 0
+    $statusMsg = ""
+
+    Write-Host "Select one or more agents (space to toggle, Up/Down to move, Enter to confirm)."
+    Write-Host "Select 'all' to deploy every supported agent."
+    Write-Host "Select 'clear and exit' to clear selection and quit."
+    Write-Host ""
+
+    $firstRender = $true
+
+    try {
+        [Console]::CursorVisible = $false
+
+        Render-AgentMenu -Options $options -Selected $selected -Cursor $cursor -StatusMessage $statusMsg -FirstRender $firstRender
+        $firstRender = $false
+
+        while ($true) {
+            $keyInfo = [Console]::ReadKey($true)
+
+            switch ($keyInfo.Key) {
+                'UpArrow' {
+                    $cursor = ($cursor - 1 + $optionsCount) % $optionsCount
+                    $statusMsg = ""
+                }
+                'DownArrow' {
+                    $cursor = ($cursor + 1) % $optionsCount
+                    $statusMsg = ""
+                }
+                'Spacebar' {
+                    if ($cursor -eq $exitIndex) {
+                        if ($selected[$cursor] -eq 1) {
+                            $selected[$cursor] = 0
+                            $statusMsg = ""
+                        } else {
+                            for ($i = 0; $i -lt $optionsCount; $i++) { $selected[$i] = 0 }
+                            $selected[$cursor] = 1
+                            $statusMsg = "Press Enter to clear selections and exit."
+                        }
+                    } elseif ($options[$cursor] -eq 'all') {
+                        if ($selected[$cursor] -eq 1) {
+                            for ($i = 0; $i -lt $exitIndex; $i++) { $selected[$i] = 0 }
+                        } else {
+                            for ($i = 0; $i -lt $exitIndex; $i++) { $selected[$i] = 1 }
+                        }
+                        $selected[$exitIndex] = 0
+                        $statusMsg = ""
+                    } else {
+                        $selected[$cursor] = if ($selected[$cursor] -eq 1) { 0 } else { 1 }
+
+                        $selected[$exitIndex] = 0
+                        $selected[0] = 1
+                        for ($i = 1; $i -lt $exitIndex; $i++) {
+                            if ($selected[$i] -eq 0) {
+                                $selected[0] = 0
+                                break
+                            }
+                        }
+                        $statusMsg = ""
+                    }
+                }
+                'Enter' {
+                    if ($cursor -eq $exitIndex) {
+                        [Console]::CursorVisible = $true
+                        Write-Host "`nSelection cleared. Exiting."
+                        return $null
+                    }
+
+                    $chosen = @()
+                    for ($i = 0; $i -lt $optionsCount; $i++) {
+                        if ($i -eq $exitIndex) { continue }
+                        if ($selected[$i] -eq 1) { $chosen += $options[$i] }
+                    }
+
+                    if ($chosen.Count -eq 0) {
+                        $statusMsg = "Select at least one option."
+                    } else {
+                        [Console]::CursorVisible = $true
+                        return $chosen
+                    }
+                }
+            }
+
+            Render-AgentMenu -Options $options -Selected $selected -Cursor $cursor -StatusMessage $statusMsg -FirstRender $firstRender
+        }
+    } finally {
+        [Console]::CursorVisible = $true
+    }
+}
+
+function Resolve-SelectedAgents {
+    param([string[]]$Selected)
+
+    $seen = @{}
+    $enabled = [System.Collections.Generic.List[string]]::new()
+
+    foreach ($agent in $Selected) {
+        switch ($agent) {
+            'all' {
+                $script:EnabledAgents = @($ValidAgents)
+                return
+            }
+            { $_ -in $ValidAgents } {
+                if (-not $seen.ContainsKey($agent)) {
+                    $enabled.Add($agent)
+                    $seen[$agent] = $true
+                }
+            }
+            default {
+                Write-Error "Unsupported agent '$agent'. Supported agents: all, $($ValidAgents -join ', ')"
+                exit 1
+            }
+        }
+    }
+
+    if ($enabled.Count -eq 0) {
+        Write-Error "At least one agent must be selected."
+        exit 1
+    }
+
+    $script:EnabledAgents = @($enabled)
+}
+
+function New-SkillWrapper {
+    param(
+        [string]$PlaybookPath,
+        [string]$TargetDir,
+        [string]$RelPath,
+        [string]$AllowedTools = ""
+    )
+
+    $name = ""
+    $description = ""
+
+    # Explicit UTF-8: Windows PowerShell 5.1 would otherwise decode the playbook
+    # as ANSI and write a mangled description into every wrapper.
+    foreach ($line in [System.IO.File]::ReadAllLines([System.IO.Path]::GetFullPath($PlaybookPath), [System.Text.Encoding]::UTF8)) {
+        if ($line -match '^name:\s*(.+)$') {
+            if (-not $name) { $name = $Matches[1].Trim() }
+        }
+        if ($line -match '^description:\s*"?(.+?)"?\s*$') {
+            if (-not $description) { $description = $Matches[1].Trim().Trim('"') }
+        }
+        if ($name -and $description) { break }
+    }
+
+    if (-not $name -or -not $description) { return }
+
+    $skillDir = Join-Path $TargetDir $name
+    $skillFile = Join-Path $skillDir "SKILL.md"
+
+    $bt = '`'
+    $lines = @("---", "name: $name", "description: `"$description`"")
+    if ($AllowedTools) {
+        $lines += "allowed-tools: `"$AllowedTools`""
+    }
+    $lines += @("---", "", "Read and follow ${bt}.context/playbooks/${RelPath}${bt} in full.")
+
+    $content = ($lines -join "`n") + "`n"
+
+    # Same rule as Copy-SingleFile: an unchanged wrapper needs no prompt.
+    if (Test-Path -LiteralPath $skillFile -PathType Leaf) {
+        $existing = [System.IO.File]::ReadAllText([System.IO.Path]::GetFullPath($skillFile), [System.Text.Encoding]::UTF8) -replace "`r`n", "`n"
+        if ($existing -ceq $content) { return }
+    }
+
+    if (-not (Confirm-Overwrite -Destination $skillFile)) {
+        return
+    }
+
+    New-Item -ItemType Directory -Path $skillDir -Force | Out-Null
+
+    [System.IO.File]::WriteAllText($skillFile, $content, (New-Object System.Text.UTF8Encoding($false)))
+}
+
+# Remove generated wrappers whose playbook the library no longer ships.
+#
+# A wrapper is only a pointer, so once its playbook is renamed or removed it
+# advertises a skill that cannot load. Only files that are exactly what
+# New-SkillWrapper writes - at most seven lines, ending in the "Read and follow"
+# pointer - are touched; anything a consumer wrote themselves is left alone.
+# Mirrors prune_stale_skills in deploy.sh.
+function Remove-StaleSkillWrappers {
+    param([string]$SkillsDir)
+    if (-not (Test-Path -LiteralPath $SkillsDir)) { return }
+    foreach ($dir in (Get-ChildItem -LiteralPath $SkillsDir -Directory -ErrorAction SilentlyContinue)) {
+        $skillFile = Join-Path $dir.FullName 'SKILL.md'
+        if (-not (Test-Path -LiteralPath $skillFile -PathType Leaf)) { continue }
+        $lines = [System.IO.File]::ReadAllLines($skillFile, [System.Text.Encoding]::UTF8)
+        if ($lines.Count -gt 7) { continue }
+        $target = $null
+        foreach ($line in $lines) {
+            if ($line -match '^Read and follow `\.context/playbooks/(.+)` in full\.$') { $target = $Matches[1] }
+        }
+        if (-not $target) { continue }
+        if (Test-Path -LiteralPath (Join-Path $script:Target ".context/playbooks/$target")) { continue }
+        Remove-Item -LiteralPath $dir.FullName -Recurse -Force
+        Write-Host "    Removed stale skill wrapper $($dir.Name) (playbook $target no longer ships)"
+    }
+}
+
+function New-SkillsForSelectedAgents {
+    param(
+        [string]$PlaybookPath,
+        [string]$RelPath,
+        [string]$AllowedTools = "Read, Grep, Glob, Bash(git *), Write, Edit, Agent"
+    )
+
+    if (Test-AgentEnabled 'claude') {
+        New-SkillWrapper -PlaybookPath $PlaybookPath -TargetDir (Join-Path $script:Target '.claude/skills') -RelPath $RelPath -AllowedTools $AllowedTools
+    }
+    if (Test-AgentEnabled 'copilot') {
+        New-SkillWrapper -PlaybookPath $PlaybookPath -TargetDir (Join-Path $script:Target '.github/skills') -RelPath $RelPath -AllowedTools ""
+    }
+}
+
+# ---------------------------------------------------------------------------
+# Main
+# ---------------------------------------------------------------------------
+
+# Dot-source guard: allows deploy.Tests.ps1 to import these functions without running a deploy.
+if ($MyInvocation.InvocationName -ne '.') {
+
+if ($Help) {
+    Show-Usage
+    return
+}
+
+Print-Banner
+
+if ($Overwrite -and $NoOverwrite) {
+    Write-Error "-Overwrite and -NoOverwrite are mutually exclusive."
+    exit 1
+}
+if ($Overwrite) {
+    $script:OverwriteMode = "all"
+}
+if ($NoOverwrite) {
+    $script:OverwriteMode = "none"
+}
+
+if (-not $Agents -or $Agents.Count -eq 0) {
+    $isInteractive = $false
+    try {
+        $isInteractive = [Environment]::UserInteractive `
+            -and -not [Console]::IsInputRedirected `
+            -and -not [Console]::IsOutputRedirected
+    } catch { }
+
+    if ($isInteractive) {
+        $result = Select-AgentsInteractive
+        if ($null -eq $result) {
+            exit 0
+        }
+        $Agents = $result
+    } else {
+        Write-Error "-Agents is mandatory in non-interactive mode."
+        Show-Usage
+        exit 1
+    }
+}
+
+Resolve-SelectedAgents -Selected $Agents
+
+if (-not $TargetRepo) {
+    $script:Target = (Get-Location).Path
+} elseif ([System.IO.Path]::IsPathRooted($TargetRepo)) {
+    $script:Target = $TargetRepo
+} else {
+    # Resolve relative to PowerShell's working directory rather than letting .NET fall back to
+    # [Environment]::CurrentDirectory. Add-Type (invoked by Enable-VirtualTerminal for the
+    # interactive menu) resets that process-wide value on Windows, which would otherwise silently
+    # redirect every subsequent relative-path file operation to the wrong directory.
+    $script:Target = [System.IO.Path]::GetFullPath((Join-Path (Get-Location).Path $TargetRepo))
+}
+
+if (-not (Test-Path $script:Target -PathType Container)) {
+    $answer = Read-Host "Directory '$($script:Target)' does not exist. Create it? [y/N]"
+    if ($answer -match '^[yY]') {
+        New-Item -ItemType Directory -Path $script:Target -Force | Out-Null
+        Write-Host "Created '$($script:Target)'"
+    } else {
+        Write-Host "Aborted." -ForegroundColor Red
+        exit 1
+    }
+}
+
+# Content lives one level up: this script sits in scripts/, sources are at the repo root.
+$SourceRoot = Split-Path -Parent $PSScriptRoot
+
+. (Join-Path $PSScriptRoot 'lib/common.ps1')
+
+$DeployVersion = '0.0.0'
+$versionFile = Join-Path $SourceRoot 'VERSION'
+if (Test-Path -LiteralPath $versionFile) {
+    $candidate = ConvertTo-AcSemVer ((Read-AcTextLines -Path $versionFile) -join '')
+    if (Test-AcSemVer $candidate) { $DeployVersion = $candidate }
+}
+
+Write-Host "Deploying agent-contexts to $($script:Target)"
+Write-Host "  Version: $DeployVersion"
+Write-Host "  Selected agents: $($script:EnabledAgents -join ', ')"
+
+# A deployment made before versioning has a .context/ but no manifest. Copying
+# over it would stamp a manifest claiming the new version onto whatever base
+# files the overwrite guard skipped, leave AGENTS.md without a managed block,
+# and make migrate refuse to run afterwards because a manifest now exists.
+# Upgrade it first: migrate preserves every local edit as an override, and
+# refuses to run on a dirty git tree so the result is reviewable as a diff.
+# Mirrors the same step in deploy.sh.
+$legacyContext = Join-Path $script:Target '.context'
+if ((Test-Path -LiteralPath $legacyContext) -and
+    -not (Test-Path -LiteralPath (Join-Path $legacyContext 'manifest.json')) -and
+    ((Test-Path -LiteralPath (Join-Path $legacyContext 'index.md')) -or
+     (Test-Path -LiteralPath (Join-Path $legacyContext 'standards')) -or
+     (Test-Path -LiteralPath (Join-Path $legacyContext 'playbooks')))) {
+    Write-Host "  Existing deployment from before versioning detected - upgrading it first."
+    Write-Host ""
+    $global:LASTEXITCODE = 0
+    $migrated = $true
+    try {
+        & (Join-Path $PSScriptRoot 'migrate.ps1') -Target $script:Target -Apply
+    } catch {
+        Write-Host $_.Exception.Message -ForegroundColor Red
+        $migrated = $false
+    }
+    if (-not $migrated -or $LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath (Join-Path $legacyContext 'manifest.json'))) {
+        Write-Host ""
+        Write-Host "Error: could not upgrade the existing deployment; nothing else was changed." -ForegroundColor Red
+        exit 1
+    }
+    Write-Host ""
+}
+
+Write-Host "  Copying shared context files..."
+
+# AGENTS.md belongs to the consumer: it carries their [CONFIGURE] sections.
+# Only the managed block is ours, so refresh just that when it is present.
+$agentsSrc = Join-Path $SourceRoot 'core/AGENTS.md'
+$agentsDst = Join-Path $script:Target 'AGENTS.md'
+if (-not (Test-Path -LiteralPath $agentsDst)) {
+    $parent = Split-Path -Parent $agentsDst
+    if (-not (Test-Path -LiteralPath $parent)) {
+        New-Item -ItemType Directory -Path $parent -Force | Out-Null
+    }
+    $seeded = Read-AcTextLines -Path $agentsSrc | ForEach-Object {
+        if ($_.StartsWith('<!-- agentic-context:begin')) {
+            "<!-- agentic-context:begin $DeployVersion -->"
+        } else {
+            $_
+        }
+    }
+    Write-AcTextFile -Path $agentsDst -Lines $seeded
+} elseif (Test-AcManagedBlock -Path $agentsDst) {
+    Update-AcManagedBlock -Source $agentsSrc -Destination $agentsDst -Version $DeployVersion
+    Write-Host "    AGENTS.md: refreshed managed block (your content preserved)"
+} else {
+    Copy-SingleFile -Source $agentsSrc -Destination $agentsDst
+}
+
+Copy-AcContextExcludingOverrides -Source (Join-Path $SourceRoot 'core/.context') -Destination (Join-Path $script:Target '.context')
+
+if (Test-AgentEnabled 'claude') {
+    Write-Host "  Copying Claude Code files..."
+    Copy-SingleFile -Source (Join-Path $SourceRoot 'core/CLAUDE.md') -Destination (Join-Path $script:Target 'CLAUDE.md')
+    Copy-SingleFile -Source (Join-Path $SourceRoot 'core/.claude/settings.json') -Destination (Join-Path $script:Target '.claude/settings.json')
+}
+
+if (Test-AgentEnabled 'copilot') {
+    Write-Host "  Copying GitHub Copilot files..."
+    Copy-SingleFile -Source (Join-Path $SourceRoot 'core/.github/copilot-instructions.md') -Destination (Join-Path $script:Target '.github/copilot-instructions.md')
+}
+
+if (Test-AgentEnabled 'cursor') {
+    Write-Host "  Copying Cursor files..."
+    Copy-SingleFile -Source (Join-Path $SourceRoot 'core/.cursor/rules/standards.mdc') -Destination (Join-Path $script:Target '.cursor/rules/standards.mdc')
+}
+
+if (Test-AgentEnabled 'devin') {
+    Write-Host "  Copying Devin files..."
+    Copy-SingleFile -Source (Join-Path $SourceRoot 'core/.devin/devin.json') -Destination (Join-Path $script:Target '.devin/devin.json')
+}
+
+if (Test-AgentEnabled 'windsurf') {
+    Write-Host "  Copying Windsurf files..."
+    Copy-SingleFile -Source (Join-Path $SourceRoot 'core/.windsurfrules') -Destination (Join-Path $script:Target '.windsurfrules')
+}
+
+Write-Host "  Copying standards\ -> $($script:Target)\.context\standards\"
+Copy-DirectoryContents -Source (Join-Path $SourceRoot 'standards') -Destination (Join-Path $script:Target '.context/standards')
+
+Write-Host "  Copying playbooks\ -> $($script:Target)\.context\playbooks\"
+Copy-DirectoryContents -Source (Join-Path $SourceRoot 'playbooks') -Destination (Join-Path $script:Target '.context/playbooks')
+
+if ((Test-AgentEnabled 'claude') -or (Test-AgentEnabled 'copilot')) {
+    Write-Host "  Generating skill wrappers from playbooks..."
+    if (Test-AgentEnabled 'claude') {
+        Write-Host "    -> .claude\skills\ (Claude Code)"
+        New-Item -ItemType Directory -Path (Join-Path $script:Target '.claude/skills') -Force | Out-Null
+    }
+    if (Test-AgentEnabled 'copilot') {
+        Write-Host "    -> .github\skills\ (GitHub Copilot)"
+        New-Item -ItemType Directory -Path (Join-Path $script:Target '.github/skills') -Force | Out-Null
+    }
+
+    $playbookCategories = @(
+        @{ Dir = 'assess';   Tools = $null }
+        @{ Dir = 'review';   Tools = 'Read, Grep, Glob, Bash(git *)' }
+        @{ Dir = 'plan';     Tools = $null }
+        @{ Dir = 'refactor'; Tools = $null }
+        @{ Dir = 'debug';    Tools = 'Read, Grep, Glob, Bash, Write, Edit, Agent' }
+        @{ Dir = 'docs';     Tools = $null }
+        @{ Dir = 'setup';    Tools = 'Read, Grep, Glob, Bash, Write, Edit, Agent' }
+    )
+
+    foreach ($category in $playbookCategories) {
+        $dir = Join-Path $SourceRoot "playbooks/$($category.Dir)"
+        if (Test-Path $dir) {
+            $playbooks = Get-ChildItem -Path $dir -Filter '*.md' -File -ErrorAction SilentlyContinue
+            foreach ($playbook in $playbooks) {
+                $relPath = "$($category.Dir)/$($playbook.Name)"
+                $params = @{
+                    PlaybookPath = $playbook.FullName
+                    RelPath      = $relPath
+                }
+                if ($null -ne $category.Tools) {
+                    $params['AllowedTools'] = $category.Tools
+                }
+                New-SkillsForSelectedAgents @params
+            }
+        }
+    }
+
+    if (Test-AgentEnabled 'claude') { Remove-StaleSkillWrappers -SkillsDir (Join-Path $script:Target '.claude/skills') }
+    if (Test-AgentEnabled 'copilot') { Remove-StaleSkillWrappers -SkillsDir (Join-Path $script:Target '.github/skills') }
+} else {
+    Write-Host "  Skipping skill wrapper generation (no selected agent uses skills)."
+}
+
+# Consumer-owned override tree. Created here; never touched again by update.
+Write-Host "  Creating override layer -> $(Join-Path $script:Target '.context/overrides')"
+$overrideDst = Join-Path $script:Target '.context/overrides'
+if (-not (Test-Path -LiteralPath $overrideDst)) {
+    New-Item -ItemType Directory -Path $overrideDst -Force | Out-Null
+}
+Copy-AcSeedContents -Source (Join-Path $SourceRoot 'core/.context/overrides') -Destination $overrideDst
+
+# Update tooling, shipped into the target so it can maintain itself.
+Write-Host "  Installing update tooling -> $(Join-Path $script:Target '.context/bin')"
+$binDst = Join-Path $script:Target '.context/bin'
+$binLibDst = Join-Path $binDst 'lib'
+foreach ($dir in @($binDst, $binLibDst)) {
+    if (-not (Test-Path -LiteralPath $dir)) {
+        New-Item -ItemType Directory -Path $dir -Force | Out-Null
+    }
+}
+# Routed through Copy-SingleFile so -NoOverwrite means what it says. Every
+# other base file honours the guard, and silently rewriting the tooling
+# regardless would make the flag misleading. Refreshing a stale updater
+# unconditionally is update.ps1's job, where replacing the base is the
+# declared intent.
+foreach ($tool in @('update.sh', 'update.ps1', 'migrate.sh', 'migrate.ps1')) {
+    $toolSrc = Join-Path $SourceRoot "scripts/$tool"
+    if (Test-Path -LiteralPath $toolSrc) {
+        Copy-SingleFile -Source $toolSrc -Destination (Join-Path $binDst $tool)
+    }
+}
+foreach ($libFile in @('common.sh', 'common.ps1')) {
+    $libSrc = Join-Path $SourceRoot "scripts/lib/$libFile"
+    if (Test-Path -LiteralPath $libSrc) {
+        Copy-SingleFile -Source $libSrc -Destination (Join-Path $binLibDst $libFile)
+    }
+}
+
+Write-AcTextFile -Path (Join-Path $script:Target '.context/VERSION') -Lines @($DeployVersion)
+
+Write-Host "  Writing manifest -> $(Join-Path $script:Target '.context/manifest.json')"
+# pin and checkFrequency are consumer configuration, not derived state.
+# Redeploying over an existing deployment must not silently undo a deliberate
+# choice - "*" to accept majors, an exact version to freeze, or a check
+# frequency other than weekly. update.sh and update.ps1 already preserve both;
+# deploy has to agree or a redeploy quietly resets them.
+$manifestPath = Join-Path $script:Target '.context/manifest.json'
+$existingPin = ''
+$existingFreq = 'weekly'
+if (Test-Path -LiteralPath $manifestPath) {
+    try {
+        $existing = Get-AcManifest -Path $manifestPath
+        if ($existing.pin) { $existingPin = [string]$existing.pin }
+        if ($existing.checkFrequency) { $existingFreq = [string]$existing.checkFrequency }
+    } catch {
+        Write-Host "    manifest.json is unreadable - rewriting with defaults."
+    }
+}
+Write-AcManifest -ContextDir (Join-Path $script:Target '.context') -Version $DeployVersion -Agents $script:EnabledAgents -Pin $existingPin -CheckFrequency $existingFreq
+
+Write-Host ""
+Write-Host "Done. Next steps:"
+$step = 1
+
+function Show-NextStep {
+    param([string]$Message)
+    Write-Host "  $($script:step). $Message"
+    $script:step++
+}
+
+Show-NextStep "Fill in [CONFIGURE] sections in $($script:Target)\AGENTS.md"
+
+if (Test-AgentEnabled 'claude') {
+    Show-NextStep "Fill in [CONFIGURE] sections in $($script:Target)\CLAUDE.md"
+    Show-NextStep "Review $($script:Target)\.claude\settings.json and adjust permissions/hooks"
+}
+
+if (Test-AgentEnabled 'copilot') {
+    Show-NextStep "Review $($script:Target)\.github\copilot-instructions.md"
+}
+
+Show-NextStep "Never edit .context/standards|playbooks|conventions directly - use .context/overrides/ (see .context/overrides/README.md)"
+
+# Report staleness on every deploy. Fails open and never blocks.
+$latest = Get-AcLatestVersion
+if ($latest -and (Test-AcSemVerGreater $latest $DeployVersion)) {
+    Write-Host ""
+    Write-Host "  Note: you deployed $DeployVersion but $latest is available upstream."
+    Write-Host "        Pull the latest agentic-context and re-run this script."
+}
+
+if ($script:SkippedFiles.Count -gt 0) {
+    Write-Host ""
+    Write-Host "Skipped files (not overwritten - manual merge may be required):"
+    foreach ($f in $script:SkippedFiles) {
+        Write-Host "  - $f"
+    }
+}
+
+} # end dot-source guard
