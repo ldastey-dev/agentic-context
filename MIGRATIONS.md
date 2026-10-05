@@ -42,60 +42,81 @@ Only that block is rewritten on update; everything above and below it is yours.
 
 ### Migrating
 
-Run the migration from the root of the repository that has the deployment:
+Commit or stash any outstanding work, pull the latest library, then re-run
+deploy exactly as you did originally:
 
 ```bash
-# Dry run first. Nothing is written.
-/path/to/agentic-context/scripts/migrate.sh .
-
-# When the report looks right:
-/path/to/agentic-context/scripts/migrate.sh . --apply
+/path/to/agentic-context/scripts/deploy.sh --agents claude copilot /path/to/your-repo
 ```
 
 ```powershell
 # Windows PowerShell 5.1 or PowerShell 7+
-& C:\path\to\agentic-context\scripts\migrate.ps1 . -Apply
+& C:\path\to\agentic-context\scripts\deploy.ps1 -Agents claude,copilot -TargetRepo C:\path\to\your-repo
+```
+
+The old root-level `./deploy.sh` and `.\deploy.ps1` still work and forward to
+`scripts/`. Deploy detects the pre-versioning layout and runs the migration
+first, then refreshes your agent files and skill wrappers as usual.
+
+To preview the migration without deploying, or to migrate without touching
+agent files, run it directly:
+
+```bash
+# Dry run first. Nothing is written.
+/path/to/agentic-context/scripts/migrate.sh /path/to/your-repo
+
+# When the report looks right:
+/path/to/agentic-context/scripts/migrate.sh /path/to/your-repo --apply
+```
+
+```powershell
+& C:\path\to\agentic-context\scripts\migrate.ps1 C:\path\to\your-repo -Apply
 ```
 
 The migration:
 
-1. Compares every deployed file against the `unversioned` baseline, so it
-   can tell a file you edited from one you never touched.
-2. Promotes each edited file into `.context/overrides/`, preserving your content
-   and marking it `mode: replace`.
-3. Restores the base to pristine library content.
+1. Compares every deployed file against the `unversioned` baseline, which
+   records every revision the library shipped before versioning. A file that
+   matches any of them is recognised as untouched, whichever commit you
+   deployed from.
+2. Promotes each file you edited into `.context/overrides/`, preserving your
+   content and marking it `mode: replace`.
+3. Keeps an edited `index.md` as `.context/overrides/index.md` with
+   `mode: extend`, so your routes survive and the library's new routes still
+   reach you.
 4. Moves files you added yourself into the override layer, where updates cannot
-   remove them.
-5. Writes `.context/manifest.json` and installs `.context/bin/` tooling.
-6. Prepends the managed block to `AGENTS.md`, leaving your existing content
-   below it untouched.
+   remove them, and removes unedited files the library no longer ships.
+5. Restores the base to pristine library content.
+6. Writes `.context/manifest.json`, recording the agents your deployment
+   serves, and installs `.context/bin/` tooling.
+7. Converts `AGENTS.md`. If its framework sections (`## Context System` through
+   `## Mandated Standards`) are as the library shipped them, they are replaced
+   in place by the managed block, and your title and `[CONFIGURE]` sections are
+   untouched. If you edited those sections, the managed block is prepended
+   instead and your original content is kept below it for you to review.
 
 It refuses to run on a dirty git tree, so every change it makes is reviewable
 with `git diff` before you commit.
 
 ### After migrating
 
-Two follow-ups are worth doing by hand — the migration cannot make these
+Two follow-ups may be worth doing by hand — the migration cannot make these
 judgements for you:
 
-- **Trim `AGENTS.md`.** Content that the managed block now supplies may still be
-  duplicated below it. Delete the duplicates.
+- **Trim `AGENTS.md`**, only if the migration reported that it prepended the
+  managed block. Delete the sections below it that the block now supplies.
 - **Convert `mode: replace` to `mode: extend` where you can.** The migration is
   conservative and marks every promoted file `replace`, which pins the whole file
   and means you stop receiving library improvements to it. If your change was an
   addition rather than a contradiction, `extend` keeps the library version and
   appends yours. See `.context/overrides/README.md`.
 
-The migration compares against the `unversioned` baseline by default, which
-hashes the content this library shipped immediately before versioning was
-introduced - that is, what you deployed. It is deliberately distinct from the
-per-release `<version>.sha256` baselines, which record what each tagged release
-shipped. If you
-deployed from an older commit than that, some files will be reported as edited
-when you never touched them — promote only the ones you recognise, or pass
-`--baseline` to point at a baseline file you generated yourself from the commit
-you actually deployed. Without a baseline the migration cannot distinguish your
-edits from library content and will not run.
+The `unversioned` baseline is deliberately distinct from the per-release
+`<version>.sha256` baselines, which record what each tagged release shipped. If
+you deployed from a fork whose content never existed in this repository, pass
+`--baseline` to point at a baseline you generated from the commit you actually
+deployed. Without a baseline the migration cannot distinguish your edits from
+library content and will not run.
 
 ### If you never edited anything
 
