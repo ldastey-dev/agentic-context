@@ -818,6 +818,175 @@ fi
 
 rm -rf "$TC16_DIR"
 
+# ═══════════════════════════════════════════════════════════════════════
+# Helper: turn a fresh deployment into what a pre-versioning deploy left.
+# No manifest, no tooling, no override layer, and an AGENTS.md without markers.
+# ═══════════════════════════════════════════════════════════════════════
+make_unversioned() {
+  local dir="$1" tmp
+  rm -rf "$dir/.context/manifest.json" "$dir/.context/VERSION" "$dir/.context/bin" \
+    "$dir/.context/overrides" "$dir/.context/.gitignore"
+  tmp="$(mktemp)"
+  awk '
+    /^<!-- agentic-context:begin/ { next }
+    /^<!-- agentic-context:end -->/ { next }
+    /^<!-- Everything between these markers/ { skip = 1 }
+    skip { if ($0 ~ /-->[[:space:]]*$/) skip = 0; next }
+    { print }
+  ' "$dir/AGENTS.md" > "$tmp"
+  cat "$tmp" > "$dir/AGENTS.md"
+  rm -f "$tmp"
+}
+
+# sha256 of a file's contents, portable across macOS and Linux.
+sha_file() { if command -v shasum >/dev/null 2>&1; then shasum -a 256 "$1"; else sha256sum "$1"; fi | awk '{print $1}'; }
+
+# ═══════════════════════════════════════════════════════════════════════
+# TC17: migrate recognises content from any earlier revision
+#
+# Unversioned adopters deployed from whichever commit was current, so a file
+# matching ANY revision the library shipped is pristine. A single-snapshot
+# baseline turned every file the library had since improved into a pinned
+# "mode: replace" override, and kept files the library had since removed as if
+# the consumer had written them. The framework sections of AGENTS.md are
+# swapped for the managed block in place rather than duplicated.
+# ═══════════════════════════════════════════════════════════════════════
+echo ""
+echo "=== TC17: migrate across historical revisions ==="
+
+TC17_DIR=$(mktemp -d)
+(cd "$TC17_DIR" && git init -q . && git config user.email t@t && git config user.name t)
+"$SCRIPTS_DIR/deploy.sh" --agents claude --overwrite "$TC17_DIR" >/dev/null 2>&1
+make_unversioned "$TC17_DIR"
+
+TC17_BASELINE="$(mktemp)"
+cp "$SCRIPTS_DIR/baselines/unversioned.sha256" "$TC17_BASELINE"
+# An older revision of a file that still ships.
+printf 'older revision\n' > "$TC17_DIR/.context/standards/testing.md"
+printf 'standards/testing.md  %s\n' "$(sha_file "$TC17_DIR/.context/standards/testing.md")" >> "$TC17_BASELINE"
+# A file the library used to ship and no longer does.
+printf 'retired playbook\n' > "$TC17_DIR/.context/playbooks/setup/retired.md"
+printf 'playbooks/setup/retired.md  %s\n' "$(sha_file "$TC17_DIR/.context/playbooks/setup/retired.md")" >> "$TC17_BASELINE"
+# The framework region of this AGENTS.md, as an earlier template shipped it.
+(
+  # shellcheck source=scripts/lib/common.sh
+  . "$SCRIPTS_DIR/lib/common.sh"
+  region="$(mktemp)"
+  ac_agents_region "$TC17_DIR/AGENTS.md" > "$region"
+  printf '%s  %s\n' "$AC_AGENTS_REGION_KEY" "$(sha_file "$region")" >> "$TC17_BASELINE"
+  rm -f "$region"
+)
+# A consumer route added to the index.
+echo "| billing | .context/overrides/standards/billing.md | ours |" >> "$TC17_DIR/.context/index.md"
+(cd "$TC17_DIR" && git add -A >/dev/null 2>&1 && git commit -qm init >/dev/null 2>&1)
+
+TC17_OUT="$("$SCRIPTS_DIR/migrate.sh" --apply --baseline "$TC17_BASELINE" "$TC17_DIR" 2>&1)" || true
+
+if [ ! -e "$TC17_DIR/.context/overrides/standards/testing.md" ] \
+  && cmp -s "$TC17_DIR/.context/standards/testing.md" "$REPO_DIR/standards/testing.md"; then
+  pass "migrate: an earlier revision is pristine, restored and not promoted"
+else
+  fail "migrate: an earlier revision was treated as a consumer edit (output: $TC17_OUT)"
+fi
+
+if [ ! -e "$TC17_DIR/.context/playbooks/setup/retired.md" ] \
+  && [ ! -e "$TC17_DIR/.context/overrides/playbooks/setup/retired.md" ]; then
+  pass "migrate: an unedited file the library no longer ships is removed"
+else
+  fail "migrate: a retired framework file was kept as if the consumer wrote it"
+fi
+
+if grep -q '^mode: extend' "$TC17_DIR/.context/overrides/index.md" 2>/dev/null \
+  && grep -q 'billing' "$TC17_DIR/.context/overrides/index.md"; then
+  pass "migrate: an edited index.md is kept as an extend override"
+else
+  fail "migrate: consumer routes in index.md were lost"
+fi
+
+if [ "$(grep -c '^## Context System' "$TC17_DIR/AGENTS.md")" = "1" ] \
+  && [ "$(head -1 "$TC17_DIR/AGENTS.md")" = "# AGENTS.md" ] \
+  && grep -q '^<!-- agentic-context:begin' "$TC17_DIR/AGENTS.md" \
+  && grep -qF '<!-- agentic-context:end -->' "$TC17_DIR/AGENTS.md"; then
+  pass "migrate: AGENTS.md framework sections replaced in place, not duplicated"
+else
+  fail "migrate: AGENTS.md was not converted in place"
+fi
+
+if grep -q '"agents": \["claude"\]' "$TC17_DIR/.context/manifest.json"; then
+  pass "migrate: manifest records the agents inferred from the deployment"
+else
+  fail "migrate: manifest agents were not inferred"
+fi
+
+if [ -f "$TC17_DIR/.context/.gitignore" ] && grep -q 'last-update-check' "$TC17_DIR/.context/.gitignore"; then
+  pass "migrate: update-check stamp is git-ignored"
+else
+  fail "migrate: .context/.gitignore was not installed"
+fi
+
+rm -rf "$TC17_DIR" "$TC17_BASELINE"
+
+# ═══════════════════════════════════════════════════════════════════════
+# TC18: re-running deploy over a pre-versioning deployment upgrades it
+#
+# Most adopters will simply pull the library and re-run deploy, as they always
+# have. Doing so used to stamp a 1.0.0 manifest over stale base files, leave
+# AGENTS.md unmanaged, and make migrate refuse to run afterwards.
+# ═══════════════════════════════════════════════════════════════════════
+echo ""
+echo "=== TC18: deploy over an unversioned deployment ==="
+
+TC18_DIR=$(mktemp -d)
+(cd "$TC18_DIR" && git init -q . && git config user.email t@t && git config user.name t)
+"$SCRIPTS_DIR/deploy.sh" --agents claude --overwrite "$TC18_DIR" >/dev/null 2>&1
+make_unversioned "$TC18_DIR"
+echo "MY LOCAL EDIT" >> "$TC18_DIR/.context/standards/security.md"
+mkdir -p "$TC18_DIR/.claude/skills/old-gone"
+printf -- '---\nname: old-gone\ndescription: "x"\n---\n\nRead and follow `.context/playbooks/assess/old-gone.md` in full.\n' \
+  > "$TC18_DIR/.claude/skills/old-gone/SKILL.md"
+mkdir -p "$TC18_DIR/.claude/skills/my-skill"
+printf 'My own skill, which points at .context/playbooks/assess/not-there.md\n' > "$TC18_DIR/.claude/skills/my-skill/SKILL.md"
+(cd "$TC18_DIR" && git add -A >/dev/null 2>&1 && git commit -qm init >/dev/null 2>&1)
+
+echo "dirty" > "$TC18_DIR/dirty.txt"
+if ! "$SCRIPTS_DIR/deploy.sh" --agents claude --no-overwrite "$TC18_DIR" >/dev/null 2>&1 \
+  && [ ! -f "$TC18_DIR/.context/manifest.json" ]; then
+  pass "deploy: refuses to upgrade a dirty tree and writes nothing"
+else
+  fail "deploy: upgraded an unversioned deployment on a dirty tree"
+fi
+rm -f "$TC18_DIR/dirty.txt"
+
+TC18_OUT="$("$SCRIPTS_DIR/deploy.sh" --agents claude --no-overwrite "$TC18_DIR" 2>&1)" || true
+
+if [ -f "$TC18_DIR/.context/manifest.json" ] \
+  && grep -q 'MY LOCAL EDIT' "$TC18_DIR/.context/overrides/standards/security.md" 2>/dev/null \
+  && ! grep -q 'MY LOCAL EDIT' "$TC18_DIR/.context/standards/security.md"; then
+  pass "deploy: unversioned deployment migrated, local edit preserved as an override"
+else
+  fail "deploy: unversioned deployment was not migrated (output: $TC18_OUT)"
+fi
+
+if grep -q '^<!-- agentic-context:begin' "$TC18_DIR/AGENTS.md"; then
+  pass "deploy: AGENTS.md gained the managed block"
+else
+  fail "deploy: AGENTS.md left without a managed block"
+fi
+
+if ! printf '%s' "$TC18_OUT" | grep -q 'Skipped files'; then
+  pass "deploy: unchanged files are not reported as skipped"
+else
+  fail "deploy: identical files were reported as skipped"
+fi
+
+if [ ! -e "$TC18_DIR/.claude/skills/old-gone" ] && [ -f "$TC18_DIR/.claude/skills/my-skill/SKILL.md" ]; then
+  pass "deploy: stale generated wrapper pruned, consumer skill untouched"
+else
+  fail "deploy: skill wrapper pruning removed the wrong files"
+fi
+
+rm -rf "$TC18_DIR"
+
 echo ""
 echo "=== Results ==="
 echo "  Passed: $PASSED"

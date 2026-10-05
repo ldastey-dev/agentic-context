@@ -64,13 +64,15 @@ jobs:
           # invoked directly need it; lib/common.sh is sourced, not run.
           status=0
           for script in \
+            deploy.sh \
             scripts/deploy.sh \
             scripts/update.sh \
             scripts/migrate.sh \
             scripts/tests/test-deploy.sh \
             scripts/ci/next-version.sh \
             scripts/ci/write-baseline.sh \
-            scripts/ci/write-changelog.sh; do
+            scripts/ci/write-changelog.sh \
+            scripts/ci/write-unversioned-baseline.sh; do
             mode="$(git ls-files -s "$script" | cut -d' ' -f1)"
             if [ "$mode" != "100755" ]; then
               echo "::error file=$script::$script is mode $mode; it must be 100755. Run: git update-index --chmod=+x $script"
