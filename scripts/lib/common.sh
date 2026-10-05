@@ -253,11 +253,50 @@ ac_sha256_lf() {
   fi
 }
 
-# Look up one path's expected hash in a baseline file.
-ac_baseline_lookup() {
-  local baseline="$1" path="$2"
-  [ -f "$baseline" ] || return 1
-  awk -v p="$path" '$1 == p { print $2; found = 1; exit } END { exit !found }' "$baseline"
+# Classify one file against a baseline.
+#
+# A baseline may list a path more than once: the unversioned baseline records
+# every revision the library ever shipped for a path, because unversioned
+# adopters deployed from whichever commit was current at the time. A file is
+# pristine if it matches ANY recorded revision.
+#
+# ac_baseline_match <baseline> <path> <hash>
+#   0 - the hash is a known revision of this path (pristine)
+#   1 - the path is known but the hash is not (edited)
+#   2 - the path is not in the baseline at all (consumer-added)
+ac_baseline_match() {
+  local baseline="$1" path="$2" hash="$3"
+  [ -f "$baseline" ] || return 2
+  awk -v p="$path" -v h="$hash" '
+    $1 == p { known = 1; if ($2 == h) { hit = 1; exit } }
+    END { if (hit) exit 0; if (known) exit 1; exit 2 }
+  ' "$baseline"
+}
+
+# --- AGENTS.md framework region ----------------------------------------------
+#
+# Before 1.0.0 the template had no markers, so the framework-authored sections
+# of a consumer's AGENTS.md cannot be located by marker. They can be located by
+# heading: the region runs from "## Context System" up to (not including)
+# "## Project-Specific Rules". migrate hashes that region and, when it matches a
+# revision the library shipped, replaces it in place with the managed block, so
+# the consumer is not left with two copies of every framework section.
+#
+# The key is not a .context path, so it can never collide with a file entry.
+# shellcheck disable=SC2034 # read by migrate.sh and ci/write-unversioned-baseline.sh
+AC_AGENTS_REGION_KEY='AGENTS.md#framework-region'
+
+# Print the region, CR-stripped, or return 1 when either heading is missing.
+# Mirrors Get-AcAgentsRegion in common.ps1; the two must stay equivalent.
+ac_agents_region() {
+  local file="$1"
+  [ -f "$file" ] || return 1
+  tr -d '\r' < "$file" | awk '
+    /^## Context System[[:space:]]*$/ && !started { started = 1 }
+    /^## Project-Specific Rules/ && started { ended = 1; exit }
+    started { print }
+    END { exit !(started && ended) }
+  '
 }
 
 # --- managed block ---------------------------------------------------------

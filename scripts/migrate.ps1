@@ -101,17 +101,22 @@ Write-Host ""
 
 # --- classify --------------------------------------------------------------
 
-$baselineMap = @{}
-foreach ($line in (Get-Content -LiteralPath $Baseline)) {
-    if ($line -match '^(\S+)\s+([a-f0-9]+)$') {
-        $baselineMap[$Matches[1]] = $Matches[2]
-    }
-}
+$baselineMap = Read-AcBaseline -Path $Baseline
 
 $diverged = New-Object System.Collections.Generic.List[string]
 $added = New-Object System.Collections.Generic.List[string]
 $nonMd = New-Object System.Collections.Generic.List[string]
+$retired = New-Object System.Collections.Generic.List[string]
 $totalCount = 0
+
+# Where a deployed base path comes from in this checkout. A path with no source
+# file is one the library no longer ships.
+function Get-AcSourcePath {
+    param([string]$Rel)
+    if ($Rel.StartsWith('conventions/')) { return (Join-Path $SourceRoot "core/.context/$Rel") }
+    if ($Rel -eq 'index.md') { return (Join-Path $SourceRoot 'core/.context/index.md') }
+    return (Join-Path $SourceRoot $Rel)
+}
 
 foreach ($area in @('standards', 'playbooks', 'conventions')) {
     $areaDir = Join-Path $ContextDir $area
@@ -126,14 +131,29 @@ foreach ($area in @('standards', 'playbooks', 'conventions')) {
         $rel = $area + '/' + $f.FullName.Substring($full.Length).TrimStart($sep).Replace('\', '/')
         $totalCount++
         # LF-normalised: a CRLF checkout must not make every file look edited.
-        $actual = Get-AcFileHashLf -Path $f.FullName
-        if ($baselineMap.ContainsKey($rel)) {
-            if ($baselineMap[$rel] -ne $actual) { $diverged.Add($rel) }
+        $status = Get-AcBaselineStatus -Baseline $baselineMap -RelPath $rel -Hash (Get-AcFileHashLf -Path $f.FullName)
+        $shipped = Test-Path -LiteralPath (Get-AcSourcePath $rel)
+        if ($status -eq 'pristine') {
+            # Unedited; removed if the library has since stopped shipping it.
+            if (-not $shipped) { $retired.Add($rel) }
+        } elseif ($status -eq 'edited' -and $shipped) {
+            $diverged.Add($rel)
         } else {
-            # Not in the baseline at all: a file the consumer added themselves.
+            # Not in the baseline (a file the consumer added), or an edited copy
+            # of a file the library no longer ships - there is no base left for an
+            # override to replace, so it is kept as a standalone file.
             $added.Add($rel)
         }
     }
+}
+
+# index.md is base content too. Consumers commonly add their own routes to it,
+# and the restore below overwrites it, so an edited copy must be kept.
+$indexEdited = $false
+$indexPath = Join-Path $ContextDir 'index.md'
+if (Test-Path -LiteralPath $indexPath) {
+    $indexStatus = Get-AcBaselineStatus -Baseline $baselineMap -RelPath 'index.md' -Hash (Get-AcFileHashLf -Path $indexPath)
+    if ($indexStatus -ne 'pristine') { $indexEdited = $true }
 }
 
 # Non-markdown files. The baseline only covers .md, but the restore below
@@ -176,7 +196,7 @@ if ($totalCount -gt 1 -and $diverged.Count -eq $totalCount) {
     exit 1
 }
 
-if ($diverged.Count -eq 0 -and $added.Count -eq 0 -and $nonMd.Count -eq 0) {
+if ($diverged.Count -eq 0 -and $added.Count -eq 0 -and $nonMd.Count -eq 0 -and -not $indexEdited) {
     Write-Host "No local modifications detected - this deployment is pristine."
 } else {
     if ($diverged.Count -gt 0) {
@@ -185,7 +205,8 @@ if ($diverged.Count -eq 0 -and $added.Count -eq 0 -and $nonMd.Count -eq 0) {
         Write-Host ""
     }
     if ($added.Count -gt 0) {
-        Write-Host "Files you added ($($added.Count)) - will move to overrides as standalone additions:"
+        Write-Host "Files you added, or edited files the library no longer ships ($($added.Count))"
+        Write-Host "- will move to overrides as standalone additions:"
         foreach ($rel in $added) { Write-Host "  $rel  ->  .context/overrides/$rel" }
         Write-Host ""
     }
@@ -194,6 +215,19 @@ if ($diverged.Count -eq 0 -and $added.Count -eq 0 -and $nonMd.Count -eq 0) {
         foreach ($rel in $nonMd) { Write-Host "  $rel  ->  .context/overrides/$rel" }
         Write-Host ""
     }
+}
+
+if ($indexEdited) {
+    Write-Host "index.md has local edits - your copy will be kept as .context/overrides/index.md"
+    Write-Host "  (mode: extend, so routes the library adds still reach you). Trim it to just"
+    Write-Host "  your own routes, or move them to the Additional Context table in AGENTS.md."
+    Write-Host ""
+}
+
+if ($retired.Count -gt 0) {
+    Write-Host "Framework files the library no longer ships ($($retired.Count)) - unedited, will be removed:"
+    foreach ($rel in $retired) { Write-Host "  $rel" }
+    Write-Host ""
 }
 
 # State the destructive behaviour before it happens, not after.
@@ -239,8 +273,8 @@ function Move-AcToOverride {
             '     so you continue to inherit upstream improvements. -->',
             ''
         )
-        $body = Get-Content -LiteralPath $src
-        Set-Content -LiteralPath $dst -Value (@($header) + @($body)) -Encoding UTF8
+        $body = @(Read-AcTextLines -Path $src)
+        Write-AcTextFile -Path $dst -Lines (@($header) + @($body))
     } else {
         Copy-Item -LiteralPath $src -Destination $dst -Force
     }
@@ -264,6 +298,21 @@ foreach ($rel in $nonMd) {
     Remove-Item -LiteralPath (Join-Path $ContextDir $rel) -Force -ErrorAction SilentlyContinue
 }
 
+if ($indexEdited) {
+    $indexHeader = @(
+        '---',
+        'overrides: index.md',
+        'mode: extend',
+        '---',
+        '',
+        '<!-- Promoted from an unversioned deployment by agentic-context migrate.',
+        '     This is your edited copy of the routing table. The library index.md still',
+        '     loads first, so delete every row below except the routes you added. -->',
+        ''
+    )
+    Write-AcTextFile -Path (Join-Path $overrideRoot 'index.md') -Lines (@($indexHeader) + @(Read-AcTextLines -Path $indexPath))
+}
+
 Write-Host "Restoring base content from $SourceRoot ..."
 foreach ($area in $sourceAreas) {
     if (-not (Test-Path -LiteralPath $area.From)) { continue }
@@ -276,6 +325,10 @@ foreach ($area in $sourceAreas) {
 $srcIndex = Join-Path $SourceRoot 'core/.context/index.md'
 if (Test-Path -LiteralPath $srcIndex) {
     Copy-Item -LiteralPath $srcIndex -Destination (Join-Path $ContextDir 'index.md') -Force
+}
+$srcGitignore = Join-Path $SourceRoot 'core/.context/.gitignore'
+if (Test-Path -LiteralPath $srcGitignore) {
+    Copy-Item -LiteralPath $srcGitignore -Destination (Join-Path $ContextDir '.gitignore') -Force
 }
 $srcOverrideReadme = Join-Path $SourceRoot 'core/.context/overrides/README.md'
 if (Test-Path -LiteralPath $srcOverrideReadme) {
@@ -300,56 +353,105 @@ foreach ($libFile in @('common.sh', 'common.ps1')) {
     }
 }
 
-# AGENTS.md: prepend the managed block, leave everything the consumer has intact.
-# Identifying which of their existing regions were framework-authored is guesswork,
-# so this deliberately does not try - a human reviews one file instead.
+# AGENTS.md. When the framework-authored region (## Context System up to
+# ## Project-Specific Rules) is exactly as some release of the template shipped
+# it, swap it for the managed block in place: the consumer's title and every
+# [CONFIGURE] section stay where they are, and nothing is duplicated. When the
+# region was edited, or cannot be found, which parts are framework-authored is
+# guesswork - so the block is prepended and a human reviews one file instead.
 $NewVersion = '0.0.0'
 $versionFile = Join-Path $SourceRoot 'VERSION'
 if (Test-Path -LiteralPath $versionFile) {
-    $candidate = ConvertTo-AcSemVer ((Get-Content -LiteralPath $versionFile -Raw))
+    $candidate = ConvertTo-AcSemVer ((Read-AcTextLines -Path $versionFile) -join '')
     if (Test-AcSemVer $candidate) { $NewVersion = $candidate }
 }
 
 $agentsFile = Join-Path $Target 'AGENTS.md'
 $agentsSrc = Join-Path $SourceRoot 'core/AGENTS.md'
+$agentsPrepended = $false
 
 if (Test-Path -LiteralPath $agentsSrc) {
+    $block = Get-AcManagedBlock -Path $agentsSrc -Version $NewVersion
     if (-not (Test-Path -LiteralPath $agentsFile)) {
-        $seeded = Get-Content -LiteralPath $agentsSrc | ForEach-Object {
+        $seeded = Read-AcTextLines -Path $agentsSrc | ForEach-Object {
             if ($_.StartsWith('<!-- agentic-context:begin')) {
                 "<!-- agentic-context:begin $NewVersion -->"
             } else {
                 $_
             }
         }
-        Set-Content -LiteralPath $agentsFile -Value $seeded -Encoding UTF8
+        Write-AcTextFile -Path $agentsFile -Lines $seeded
     } elseif (Test-AcManagedBlock -Path $agentsFile) {
         Write-Host "  AGENTS.md already has a managed block - left as is."
     } else {
-        $block = Get-AcManagedBlock -Path $agentsSrc -Version $NewVersion
-        $notice = @(
-            '',
-            '---',
-            '',
-            '<!-- agentic-context migrate: everything below is your original AGENTS.md, unchanged.',
-            '     Framework content is now in the managed block above; delete any',
-            '     duplicated sections below that the block already covers. -->',
-            ''
-        )
-        $original = Get-Content -LiteralPath $agentsFile
-        Set-Content -LiteralPath $agentsFile -Value (@($block) + $notice + @($original)) -Encoding UTF8
-        Write-Host "  AGENTS.md: managed block prepended; your original content kept below for review."
+        $region = Get-AcAgentsRegion -Path $agentsFile
+        $regionPristine = $false
+        if ($null -ne $region) {
+            $regionStatus = Get-AcBaselineStatus -Baseline $baselineMap -RelPath $script:AcAgentsRegionKey -Hash (Get-AcStringHash $region)
+            $regionPristine = ($regionStatus -eq 'pristine')
+        }
+        # Line endings are preserved: a CRLF file stays CRLF, so the diff shows
+        # only the region that changed rather than every line.
+        $crlf = Test-AcCrlf -Path $agentsFile
+        $original = @(Read-AcTextLines -Path $agentsFile)
+
+        if ($regionPristine) {
+            $out = New-Object System.Collections.Generic.List[string]
+            $state = 0
+            foreach ($line in $original) {
+                if ($state -eq 0 -and $line -match '^## Context System\s*$') {
+                    $state = 1
+                    foreach ($b in $block) { $out.Add($b) }
+                    $out.Add('')
+                    $out.Add('---')
+                    $out.Add('')
+                    continue
+                }
+                if ($state -eq 1 -and $line.StartsWith('## Project-Specific Rules')) { $state = 2 }
+                if ($state -ne 1) { $out.Add($line) }
+            }
+            Write-AcTextFile -Path $agentsFile -Lines $out -Crlf:$crlf
+            Write-Host "  AGENTS.md: framework sections replaced in place by the managed block; your sections untouched."
+        } else {
+            $notice = @(
+                '',
+                '---',
+                '',
+                '<!-- agentic-context migrate: everything below is your original AGENTS.md, unchanged.',
+                '     Framework content is now in the managed block above; delete any',
+                '     duplicated sections below that the block already covers. -->',
+                ''
+            )
+            Write-AcTextFile -Path $agentsFile -Lines (@($block) + $notice + @($original)) -Crlf:$crlf
+            $agentsPrepended = $true
+            Write-Host "  AGENTS.md: your framework sections were edited, so the managed block was"
+            Write-Host "             prepended and your original content kept below it for review."
+        }
     }
 }
 
+# Record which agents this deployment serves, inferred from the files deploy
+# writes for each. An empty list would make the manifest claim no agents, and a
+# later deploy or update would have nothing to go on.
+$agents = New-Object System.Collections.Generic.List[string]
+if ((Test-Path -LiteralPath (Join-Path $Target 'CLAUDE.md')) -or (Test-Path -LiteralPath (Join-Path $Target '.claude/skills'))) { $agents.Add('claude') }
+if ((Test-Path -LiteralPath (Join-Path $Target '.github/copilot-instructions.md')) -or (Test-Path -LiteralPath (Join-Path $Target '.github/skills'))) { $agents.Add('copilot') }
+if (Test-Path -LiteralPath (Join-Path $Target '.cursor/rules/standards.mdc')) { $agents.Add('cursor') }
+if (Test-Path -LiteralPath (Join-Path $Target '.devin/devin.json')) { $agents.Add('devin') }
+if (Test-Path -LiteralPath (Join-Path $Target '.windsurfrules')) { $agents.Add('windsurf') }
+
 # Write the manifest last, so its hashes reflect the final state.
-Write-AcManifest -ContextDir $ContextDir -Version $NewVersion -Agents @()
-Set-Content -LiteralPath (Join-Path $ContextDir 'VERSION') -Value $NewVersion -Encoding UTF8
+Write-AcManifest -ContextDir $ContextDir -Version $NewVersion -Agents $agents.ToArray()
+Write-AcTextFile -Path (Join-Path $ContextDir 'VERSION') -Lines @($NewVersion)
 
 Write-Host ""
 Write-Host "Migration complete. Now on $NewVersion."
 Write-Host ""
 Write-Host "Review before committing:"
 Write-Host "  git -C $Target diff --stat"
-Write-Host "  $Target/AGENTS.md            - remove sections duplicated by the managed block"
-Write-Host "  $Target/.context/overrides/  - convert 'mode: replace' to 'mode: extend' where you can"
+if ($agentsPrepended) {
+    Write-Host "  $Target/AGENTS.md            - remove sections duplicated by the managed block"
+}
+if ($diverged.Count -gt 0) {
+    Write-Host "  $Target/.context/overrides/  - convert 'mode: replace' to 'mode: extend' where you can"
+}

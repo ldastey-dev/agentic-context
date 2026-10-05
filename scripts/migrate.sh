@@ -125,8 +125,19 @@ DIVERGED_LIST="$(mktemp)"
 MISSING_LIST="$(mktemp)"
 TOTAL_LIST="$(mktemp)"
 NONMD_LIST="$(mktemp)"
-cleanup() { rm -f "$DIVERGED_LIST" "$MISSING_LIST" "$TOTAL_LIST" "$NONMD_LIST"; }
+RETIRED_LIST="$(mktemp)"
+cleanup() { rm -f "$DIVERGED_LIST" "$MISSING_LIST" "$TOTAL_LIST" "$NONMD_LIST" "$RETIRED_LIST"; }
 trap cleanup EXIT INT TERM
+
+# Where a deployed base path comes from in this checkout. A path with no source
+# file is one the library no longer ships.
+source_path_for() {
+  case "$1" in
+    conventions/*) printf '%s' "$SOURCE_ROOT/core/.context/$1" ;;
+    index.md)      printf '%s' "$SOURCE_ROOT/core/.context/index.md" ;;
+    *)             printf '%s' "$SOURCE_ROOT/$1" ;;
+  esac
+}
 
 for area in standards playbooks conventions; do
   [ -d "$CONTEXT_DIR/$area" ] || continue
@@ -135,16 +146,30 @@ for area in standards playbooks conventions; do
     printf '%s\n' "$rel" >> "$TOTAL_LIST"
     # LF-normalised: a CRLF checkout must not make every file look edited.
     actual="$(ac_sha256_lf "$f")"
-    if expected="$(ac_baseline_lookup "$BASELINE" "$rel")"; then
-      if [ "$expected" != "$actual" ]; then
-        printf '%s\n' "$rel" >> "$DIVERGED_LIST"
-      fi
-    else
-      # Not in the baseline at all: a file the consumer added themselves.
-      printf '%s\n' "$rel" >> "$MISSING_LIST"
-    fi
+    status=0
+    ac_baseline_match "$BASELINE" "$rel" "$actual" || status=$?
+    shipped=1
+    [ -f "$(source_path_for "$rel")" ] || shipped=0
+    case "$status:$shipped" in
+      0:1) ;;                                              # pristine, still shipped
+      0:0) printf '%s\n' "$rel" >> "$RETIRED_LIST" ;;      # pristine, since removed upstream
+      1:1) printf '%s\n' "$rel" >> "$DIVERGED_LIST" ;;     # edited framework file
+      # Edited, but the library no longer ships it: there is no base left for an
+      # override to replace, so keep it as a standalone file.
+      1:0) printf '%s\n' "$rel" >> "$MISSING_LIST" ;;
+      *)   printf '%s\n' "$rel" >> "$MISSING_LIST" ;;      # not in the baseline: consumer-added
+    esac
   done
 done
+
+# index.md is base content too. Consumers commonly add their own routes to it,
+# and the restore below overwrites it, so an edited copy must be kept.
+INDEX_EDITED=0
+if [ -f "$CONTEXT_DIR/index.md" ]; then
+  status=0
+  ac_baseline_match "$BASELINE" index.md "$(ac_sha256_lf "$CONTEXT_DIR/index.md")" || status=$?
+  [ "$status" -eq 0 ] || INDEX_EDITED=1
+fi
 
 # Non-markdown files. The baseline only covers .md, but the restore below
 # replaces each area wholesale, so anything else here is destroyed unless it is
@@ -179,7 +204,9 @@ if [ "$total_count" -gt 1 ] && [ "$diverged_count" -eq "$total_count" ]; then
   exit 1
 fi
 
-if [ "$diverged_count" -eq 0 ] && [ "$added_count" -eq 0 ] && [ "$nonmd_count" -eq 0 ]; then
+retired_count=$(wc -l < "$RETIRED_LIST" | tr -d ' ')
+
+if [ "$diverged_count" -eq 0 ] && [ "$added_count" -eq 0 ] && [ "$nonmd_count" -eq 0 ] && [ "$INDEX_EDITED" -eq 0 ]; then
   echo "No local modifications detected — this deployment is pristine."
 else
   if [ "$diverged_count" -gt 0 ]; then
@@ -191,7 +218,8 @@ else
     echo ""
   fi
   if [ "$added_count" -gt 0 ]; then
-    echo "Files you added ($added_count) — will move to overrides as standalone additions:"
+    echo "Files you added, or edited files the library no longer ships ($added_count)"
+    echo "— will move to overrides as standalone additions:"
     while IFS= read -r rel; do
       [ -n "$rel" ] || continue
       echo "  $rel  ->  .context/overrides/$rel"
@@ -206,6 +234,22 @@ else
     done < "$NONMD_LIST"
     echo ""
   fi
+fi
+
+if [ "$INDEX_EDITED" -eq 1 ]; then
+  echo "index.md has local edits — your copy will be kept as .context/overrides/index.md"
+  echo "  (mode: extend, so routes the library adds still reach you). Trim it to just"
+  echo "  your own routes, or move them to the Additional Context table in AGENTS.md."
+  echo ""
+fi
+
+if [ "$retired_count" -gt 0 ]; then
+  echo "Framework files the library no longer ships ($retired_count) — unedited, will be removed:"
+  while IFS= read -r rel; do
+    [ -n "$rel" ] || continue
+    echo "  $rel"
+  done < "$RETIRED_LIST"
+  echo ""
 fi
 
 # State the destructive behaviour before it happens, not after.
@@ -269,6 +313,19 @@ while IFS= read -r rel; do
   rm -f "$CONTEXT_DIR/$rel"
 done < "$NONMD_LIST"
 
+if [ "$INDEX_EDITED" -eq 1 ]; then
+  {
+    printf -- '---\n'
+    printf 'overrides: index.md\n'
+    printf 'mode: extend\n'
+    printf -- '---\n\n'
+    printf '<!-- Promoted from an unversioned deployment by agentic-context migrate.\n'
+    printf '     This is your edited copy of the routing table. The library index.md still\n'
+    printf '     loads first, so delete every row below except the routes you added. -->\n\n'
+    cat "$CONTEXT_DIR/index.md"
+  } > "$CONTEXT_DIR/overrides/index.md"
+fi
+
 echo "Restoring base content from $SOURCE_ROOT ..."
 for pair in "standards:$SOURCE_ROOT/standards" "playbooks:$SOURCE_ROOT/playbooks" "conventions:$SOURCE_ROOT/core/.context/conventions"; do
   name="${pair%%:*}"
@@ -280,6 +337,7 @@ for pair in "standards:$SOURCE_ROOT/standards" "playbooks:$SOURCE_ROOT/playbooks
 done
 
 [ -f "$SOURCE_ROOT/core/.context/index.md" ] && cp "$SOURCE_ROOT/core/.context/index.md" "$CONTEXT_DIR/index.md"
+[ -f "$SOURCE_ROOT/core/.context/.gitignore" ] && cp "$SOURCE_ROOT/core/.context/.gitignore" "$CONTEXT_DIR/.gitignore"
 [ -f "$SOURCE_ROOT/core/.context/overrides/README.md" ] && cp "$SOURCE_ROOT/core/.context/overrides/README.md" "$CONTEXT_DIR/overrides/README.md"
 
 mkdir -p "$CONTEXT_DIR/bin/lib"
@@ -290,27 +348,64 @@ cp "$SOURCE_ROOT/scripts/lib/common.sh" "$CONTEXT_DIR/bin/lib/common.sh"
 [ -f "$SOURCE_ROOT/scripts/lib/common.ps1" ] && cp "$SOURCE_ROOT/scripts/lib/common.ps1" "$CONTEXT_DIR/bin/lib/common.ps1"
 chmod +x "$CONTEXT_DIR/bin"/*.sh 2>/dev/null || true
 
-# AGENTS.md: prepend the managed block, leave everything the consumer has intact.
-# Identifying which of their existing regions were framework-authored is guesswork,
-# so this deliberately does not try — a human reviews one file instead.
+# AGENTS.md. When the framework-authored region (## Context System up to
+# ## Project-Specific Rules) is exactly as some release of the template shipped
+# it, swap it for the managed block in place: the consumer's title and every
+# [CONFIGURE] section stay where they are, and nothing is duplicated. When the
+# region was edited, or cannot be found, which parts are framework-authored is
+# guesswork - so the block is prepended and a human reviews one file instead.
 NEW_VERSION="$(ac_semver_normalise "$(cat "$SOURCE_ROOT/VERSION" 2>/dev/null || echo '0.0.0')")"
 AGENTS_FILE="$TARGET/AGENTS.md"
+AGENTS_PREPENDED=0
 
 if [ -f "$SOURCE_ROOT/core/AGENTS.md" ]; then
+  block="$(mktemp)"
+  awk -v b='<!-- agentic-context:begin' -v e='<!-- agentic-context:end -->' '
+    index($0, b) == 1 { inblock = 1 }
+    inblock { print }
+    index($0, e) == 1 { inblock = 0 }
+  ' "$SOURCE_ROOT/core/AGENTS.md" \
+    | sed "1s|^<!-- agentic-context:begin.*|<!-- agentic-context:begin $NEW_VERSION -->|" > "$block"
+
+  region_pristine=1
+  if [ -f "$AGENTS_FILE" ] && ac_agents_region "$AGENTS_FILE" > "$block.region"; then
+    ac_baseline_match "$BASELINE" "$AC_AGENTS_REGION_KEY" "$(ac_sha256 "$block.region")" || region_pristine=0
+  else
+    region_pristine=0
+  fi
+
   if [ ! -f "$AGENTS_FILE" ]; then
     sed "s|^<!-- agentic-context:begin.*|<!-- agentic-context:begin $NEW_VERSION -->|" \
       "$SOURCE_ROOT/core/AGENTS.md" > "$AGENTS_FILE"
   elif grep -q '^<!-- agentic-context:begin' "$AGENTS_FILE" 2>/dev/null; then
     echo "  AGENTS.md already has a managed block — left as is."
+  elif [ "$region_pristine" -eq 1 ]; then
+    tmp="$(mktemp)"
+    # Line endings are preserved: a CRLF file stays CRLF, so the diff shows only
+    # the region that changed rather than every line.
+    crlf=0
+    if grep -q "$(printf '\r')\$" "$AGENTS_FILE" 2>/dev/null; then crlf=1; fi
+    awk -v blockfile="$block" -v crlf="$crlf" '
+      { line = $0; sub(/\r$/, "", line) }
+      line ~ /^## Context System[[:space:]]*$/ && state == 0 {
+        state = 1
+        while ((getline b < blockfile) > 0) { if (crlf) b = b "\r"; print b }
+        close(blockfile)
+        print (crlf ? "\r" : "")
+        print (crlf ? "---\r" : "---")
+        print (crlf ? "\r" : "")
+        next
+      }
+      line ~ /^## Project-Specific Rules/ && state == 1 { state = 2 }
+      state != 1 { print }
+    ' "$AGENTS_FILE" > "$tmp"
+    cat "$tmp" > "$AGENTS_FILE"
+    rm -f "$tmp"
+    echo "  AGENTS.md: framework sections replaced in place by the managed block; your sections untouched."
   else
     tmp="$(mktemp)"
     {
-      awk -v b='<!-- agentic-context:begin' -v e='<!-- agentic-context:end -->' '
-        index($0, b) == 1 { inblock = 1 }
-        inblock { print }
-        index($0, e) == 1 { inblock = 0 }
-      ' "$SOURCE_ROOT/core/AGENTS.md" \
-        | sed "1s|^<!-- agentic-context:begin.*|<!-- agentic-context:begin $NEW_VERSION -->|"
+      cat "$block"
       printf '\n---\n\n'
       printf '<!-- agentic-context migrate: everything below is your original AGENTS.md, unchanged.\n'
       printf '     Framework content is now in the managed block above; delete any\n'
@@ -319,9 +414,23 @@ if [ -f "$SOURCE_ROOT/core/AGENTS.md" ]; then
     } > "$tmp"
     cat "$tmp" > "$AGENTS_FILE"
     rm -f "$tmp"
-    echo "  AGENTS.md: managed block prepended; your original content kept below for review."
+    AGENTS_PREPENDED=1
+    echo "  AGENTS.md: your framework sections were edited, so the managed block was"
+    echo "             prepended and your original content kept below it for review."
   fi
+  rm -f "$block" "$block.region"
 fi
+
+# Record which agents this deployment serves, inferred from the files deploy
+# writes for each. An empty list would make the manifest claim no agents, and a
+# later deploy or update would have nothing to go on.
+AGENTS_JSON=""
+add_agent() { if [ -n "$AGENTS_JSON" ]; then AGENTS_JSON="$AGENTS_JSON,"; fi; AGENTS_JSON="$AGENTS_JSON\"$1\""; }
+{ [ -f "$TARGET/CLAUDE.md" ] || [ -d "$TARGET/.claude/skills" ]; } && add_agent claude
+{ [ -f "$TARGET/.github/copilot-instructions.md" ] || [ -d "$TARGET/.github/skills" ]; } && add_agent copilot
+[ -f "$TARGET/.cursor/rules/standards.mdc" ] && add_agent cursor
+[ -f "$TARGET/.devin/devin.json" ] && add_agent devin
+[ -f "$TARGET/.windsurfrules" ] && add_agent windsurf
 
 # Write the manifest last, so its hashes reflect the final state.
 now="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
@@ -333,7 +442,7 @@ now="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
   printf '  "pin": "%s",\n' "$(ac_semver_major "$NEW_VERSION").x"
   printf '  "checkFrequency": "weekly",\n'
   printf '  "deployedAt": "%s",\n' "$now"
-  printf '  "agents": [],\n'
+  printf '  "agents": [%s],\n' "$AGENTS_JSON"
   printf '  "files": {\n'
   first=1
   ac_hash_context_tree "$CONTEXT_DIR" | while IFS= read -r line; do
@@ -353,5 +462,9 @@ echo "Migration complete. Now on $NEW_VERSION."
 echo ""
 echo "Review before committing:"
 echo "  git -C $TARGET diff --stat"
-echo "  $TARGET/AGENTS.md            — remove sections duplicated by the managed block"
-echo "  $TARGET/.context/overrides/  — convert 'mode: replace' to 'mode: extend' where you can"
+if [ "$AGENTS_PREPENDED" -eq 1 ]; then
+  echo "  $TARGET/AGENTS.md            — remove sections duplicated by the managed block"
+fi
+if [ "$diverged_count" -gt 0 ]; then
+  echo "  $TARGET/.context/overrides/  — convert 'mode: replace' to 'mode: extend' where you can"
+fi

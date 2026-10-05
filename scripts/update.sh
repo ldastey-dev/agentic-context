@@ -286,6 +286,9 @@ for pair in "standards:$SRC/standards" "playbooks:$SRC/playbooks" "conventions:$
 done
 
 cp "$SRC/core/.context/index.md" "$CONTEXT_DIR/index.md" || partial_apply "could not write index.md."
+if [ -f "$SRC/core/.context/.gitignore" ]; then
+  cp "$SRC/core/.context/.gitignore" "$CONTEXT_DIR/.gitignore" || partial_apply "could not write .gitignore."
+fi
 
 # Refresh the update tooling itself, so a fixed updater reaches consumers.
 mkdir -p "$CONTEXT_DIR/bin/lib" || partial_apply "could not create .context/bin/lib."
