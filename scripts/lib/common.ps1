@@ -1,13 +1,18 @@
-# scripts/lib/common.ps1 — shared helpers for deploy, update and migrate.
+# scripts/lib/common.ps1 - shared helpers for deploy, update and migrate.
 #
 # Portability: must run on Windows PowerShell 5.1 as well as PowerShell 7+.
 # No PowerShell 7-only syntax (no ternaries, no ??, no -Parallel).
 #
 # Dot-source this file; do not execute it.
 
+# Overridable from the environment, exactly as in common.sh, so a mirror or a
+# test fixture can be pointed at without editing the deployed tooling.
 $script:AcSourceRepo = 'ldastey-dev/agentic-context'
+if ($env:AC_SOURCE_REPO) { $script:AcSourceRepo = $env:AC_SOURCE_REPO }
 $script:AcRawBase = 'https://raw.githubusercontent.com'
+if ($env:AC_RAW_BASE) { $script:AcRawBase = $env:AC_RAW_BASE }
 $script:AcWebBase = 'https://github.com'
+if ($env:AC_WEB_BASE) { $script:AcWebBase = $env:AC_WEB_BASE }
 $script:AcTimeoutSec = 5
 
 # --- hashing ---------------------------------------------------------------
@@ -37,6 +42,70 @@ function Get-AcFileHashLf {
         $sha.Dispose()
     }
     return ([System.BitConverter]::ToString($hash) -replace '-', '').ToLowerInvariant()
+}
+
+# Hash a string's UTF-8 bytes (no BOM), matching ac_sha256 over a file with the
+# same content.
+function Get-AcStringHash {
+    param([Parameter(Mandatory)][AllowEmptyString()][string]$Text)
+    $bytes = (New-Object System.Text.UTF8Encoding($false)).GetBytes($Text)
+    $sha = [System.Security.Cryptography.SHA256]::Create()
+    try {
+        $hash = $sha.ComputeHash($bytes)
+    } finally {
+        $sha.Dispose()
+    }
+    return ([System.BitConverter]::ToString($hash) -replace '-', '').ToLowerInvariant()
+}
+
+# --- text I/O ----------------------------------------------------------------
+#
+# Every text read and write goes through these. On Windows PowerShell 5.1,
+# Get-Content without -Encoding decodes a BOM-less UTF-8 file as the ANSI code
+# page, and Set-Content -Encoding UTF8 writes a BOM. Together they turn every
+# em dash in a consumer's AGENTS.md into mojibake on each rewrite, and the BOM
+# hides a managed-block marker on line 1 from the bash tooling - so a Windows
+# migration followed by a bash update leaves the block unmanaged for good.
+
+function ConvertTo-AcFullPath {
+    param([Parameter(Mandatory)][string]$Path)
+    return $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($Path)
+}
+
+# Read a text file as UTF-8 (a BOM, if present, is dropped) and return its
+# lines without terminators.
+function Read-AcTextLines {
+    param([Parameter(Mandatory)][string]$Path)
+    $text = [System.IO.File]::ReadAllText((ConvertTo-AcFullPath $Path), [System.Text.Encoding]::UTF8)
+    if ($text.Length -gt 0 -and $text[0] -eq [char]0xFEFF) { $text = $text.Substring(1) }
+    if ($text.Length -eq 0) { return }
+    $lines = $text -split "\r?\n"
+    if ($text.EndsWith("`n")) { $lines = $lines[0..($lines.Count - 2)] }
+    # Unrolled on purpose so the result pipes line by line; wrap the call in
+    # @() where an array is required.
+    return $lines
+}
+
+# True when a file uses CRLF line endings, so a rewrite can keep them.
+function Test-AcCrlf {
+    param([Parameter(Mandatory)][string]$Path)
+    if (-not (Test-Path -LiteralPath $Path)) { return $false }
+    $text = [System.IO.File]::ReadAllText((ConvertTo-AcFullPath $Path), [System.Text.Encoding]::UTF8)
+    return $text.Contains("`r`n")
+}
+
+# Write lines as UTF-8 without a BOM, LF-terminated unless -Crlf is given.
+function Write-AcTextFile {
+    param(
+        [Parameter(Mandatory)][string]$Path,
+        [AllowEmptyCollection()][AllowEmptyString()][string[]]$Lines = @(),
+        [switch]$Crlf
+    )
+    $nl = "`n"
+    if ($Crlf) { $nl = "`r`n" }
+    $text = ''
+    if (@($Lines).Count -gt 0) { $text = (@($Lines) -join $nl) + $nl }
+    [System.IO.File]::WriteAllText((ConvertTo-AcFullPath $Path), $text, (New-Object System.Text.UTF8Encoding($false)))
 }
 
 # --- semver ----------------------------------------------------------------
@@ -134,7 +203,12 @@ function Get-AcLatestVersionRaw {
     try {
         $url = "$script:AcRawBase/$Repo/$Branch/VERSION"
         $resp = Invoke-WebRequest -Uri $url -UseBasicParsing -TimeoutSec $script:AcTimeoutSec -ErrorAction Stop
-        $v = ConvertTo-AcSemVer ([string]$resp.Content)
+        # A server that does not label VERSION as text (a mirror, or a plain
+        # file server) yields byte[] here, which [string] would render as a
+        # list of numbers and the check would silently never succeed.
+        $content = $resp.Content
+        if ($content -is [byte[]]) { $content = [System.Text.Encoding]::UTF8.GetString($content) }
+        $v = ConvertTo-AcSemVer ([string]$content)
         if (Test-AcSemVer $v) { return $v }
         return $null
     } catch {
@@ -192,7 +266,7 @@ function Get-AcManifest {
     param([Parameter(Mandatory)][string]$Path)
     if (-not (Test-Path -LiteralPath $Path)) { return $null }
     try {
-        return (Get-Content -LiteralPath $Path -Raw | ConvertFrom-Json)
+        return ((Read-AcTextLines -Path $Path) -join "`n" | ConvertFrom-Json)
     } catch {
         return $null
     }
@@ -269,7 +343,7 @@ function Write-AcManifest {
     }
 
     $json = $manifest | ConvertTo-Json -Depth 5
-    Set-Content -LiteralPath (Join-Path $ContextDir 'manifest.json') -Value $json -Encoding UTF8
+    Write-AcTextFile -Path (Join-Path $ContextDir 'manifest.json') -Lines ($json -split "\r?\n")
 }
 
 # --- managed block ---------------------------------------------------------
@@ -280,7 +354,7 @@ $script:AcEndMarker = '<!-- agentic-context:end -->'
 function Test-AcManagedBlock {
     param([Parameter(Mandatory)][string]$Path)
     if (-not (Test-Path -LiteralPath $Path)) { return $false }
-    $lines = Get-Content -LiteralPath $Path
+    $lines = @(Read-AcTextLines -Path $Path)
     $hasBegin = $false
     $hasEnd = $false
     foreach ($line in $lines) {
@@ -295,7 +369,7 @@ function Get-AcManagedBlock {
 
     $out = New-Object System.Collections.Generic.List[string]
     $inBlock = $false
-    foreach ($line in (Get-Content -LiteralPath $Path)) {
+    foreach ($line in (Read-AcTextLines -Path $Path)) {
         if ($line.StartsWith($script:AcBeginMarker)) {
             $inBlock = $true
             if ($Version) {
@@ -328,7 +402,8 @@ function Update-AcManagedBlock {
     $out = New-Object System.Collections.Generic.List[string]
     $inBlock = $false
 
-    foreach ($line in (Get-Content -LiteralPath $Destination)) {
+    $crlf = Test-AcCrlf -Path $Destination
+    foreach ($line in (Read-AcTextLines -Path $Destination)) {
         if ($line.StartsWith($script:AcBeginMarker)) {
             $inBlock = $true
             foreach ($b in $block) { $out.Add($b) }
@@ -340,7 +415,7 @@ function Update-AcManagedBlock {
         if (-not $inBlock) { $out.Add($line) }
     }
 
-    Set-Content -LiteralPath $Destination -Value $out -Encoding UTF8
+    Write-AcTextFile -Path $Destination -Lines $out -Crlf:$crlf
 }
 
 # List base files whose current hash differs from the manifest record.
@@ -376,7 +451,7 @@ function Get-AcOrphanOverrides {
     foreach ($f in $files) {
         if ($f.Name -eq 'README.md') { continue }
         $target = $null
-        foreach ($line in (Get-Content -LiteralPath $f.FullName)) {
+        foreach ($line in (Read-AcTextLines -Path $f.FullName)) {
             if ($line -match '^overrides:\s*(.+)$') {
                 $target = $Matches[1].Trim()
                 break
@@ -391,4 +466,61 @@ function Get-AcOrphanOverrides {
         }
     }
     return $result
+}
+
+# --- migration baseline ------------------------------------------------------
+
+# Load a baseline into path -> list of known hashes. A path may appear more than
+# once: the unversioned baseline records every revision the library shipped,
+# because unversioned adopters deployed from whichever commit was current.
+function Read-AcBaseline {
+    param([Parameter(Mandatory)][string]$Path)
+    $map = @{}
+    foreach ($line in (Read-AcTextLines -Path $Path)) {
+        if ($line -match '^(\S+)\s+([a-f0-9]+)$') {
+            if (-not $map.ContainsKey($Matches[1])) {
+                $map[$Matches[1]] = New-Object System.Collections.Generic.List[string]
+            }
+            $map[$Matches[1]].Add($Matches[2])
+        }
+    }
+    return $map
+}
+
+# Mirrors ac_baseline_match in common.sh: 'pristine' when the hash is a known
+# revision of the path, 'edited' when the path is known but the hash is not,
+# 'unknown' when the path is not in the baseline at all.
+function Get-AcBaselineStatus {
+    param(
+        [Parameter(Mandatory)][hashtable]$Baseline,
+        [Parameter(Mandatory)][string]$RelPath,
+        [Parameter(Mandatory)][string]$Hash
+    )
+    if (-not $Baseline.ContainsKey($RelPath)) { return 'unknown' }
+    if ($Baseline[$RelPath].Contains($Hash)) { return 'pristine' }
+    return 'edited'
+}
+
+# --- AGENTS.md framework region ----------------------------------------------
+#
+# Mirrors ac_agents_region in common.sh; the two must stay equivalent. Before
+# 1.0.0 the template had no markers, so the framework-authored sections are
+# located by heading: from "## Context System" up to, not including,
+# "## Project-Specific Rules".
+$script:AcAgentsRegionKey = 'AGENTS.md#framework-region'
+
+# Return the region as LF-joined text (each line LF-terminated), or $null when
+# either heading is missing.
+function Get-AcAgentsRegion {
+    param([Parameter(Mandatory)][string]$Path)
+    if (-not (Test-Path -LiteralPath $Path)) { return $null }
+    $sb = New-Object System.Text.StringBuilder
+    $started = $false
+    foreach ($line in (Read-AcTextLines -Path $Path)) {
+        $l = $line.Replace("`r", '')
+        if (-not $started -and $l -match '^## Context System\s*$') { $started = $true }
+        if ($started -and $l.StartsWith('## Project-Specific Rules')) { return $sb.ToString() }
+        if ($started) { [void]$sb.Append($l).Append("`n") }
+    }
+    return $null
 }

@@ -79,7 +79,7 @@ if ($manifest) {
 
 function Update-AcStamp {
     try {
-        Set-Content -LiteralPath $StampPath -Value ((Get-Date).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ')) -Encoding UTF8
+        Write-AcTextFile -Path $StampPath -Lines @((Get-Date).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ'))
     } catch {
         # A stamp we cannot write must never stop the caller.
     }
@@ -248,6 +248,10 @@ try {
     }
 
     Copy-Item -LiteralPath $srcIndex -Destination (Join-Path $ContextDir 'index.md') -Force
+    $srcGitignore = Join-Path $srcPath 'core/.context/.gitignore'
+    if (Test-Path -LiteralPath $srcGitignore) {
+        Copy-Item -LiteralPath $srcGitignore -Destination (Join-Path $ContextDir '.gitignore') -Force
+    }
 
     # Refresh the update tooling itself, so a fixed updater reaches consumers.
     $binDir = Join-Path $ContextDir 'bin'
@@ -286,7 +290,7 @@ try {
     Write-AcManifest -ContextDir $ContextDir -Version $Latest -Agents $agents `
         -SourceRepo $SourceRepo -CheckFrequency $Freq -Pin $Pin
 
-    Set-Content -LiteralPath (Join-Path $ContextDir 'VERSION') -Value $Latest -Encoding UTF8
+    Write-AcTextFile -Path (Join-Path $ContextDir 'VERSION') -Lines @($Latest)
 
     Write-Host ""
     Write-Host "Updated to $Latest."
