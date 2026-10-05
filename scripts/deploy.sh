@@ -146,6 +146,12 @@ confirm_overwrite() {
 copy_file() {
   local src="$1"
   local dst="$2"
+  # Identical content needs no decision. Without this, redeploying the same
+  # version prompts once for every file in the library, and a non-interactive
+  # redeploy lists them all as "skipped" when nothing would have changed.
+  if [[ -f "$dst" ]] && cmp -s "$src" "$dst"; then
+    return 0
+  fi
   if ! confirm_overwrite "$dst"; then
     return 0
   fi
@@ -548,33 +554,48 @@ generate_skill() {
 
   local skill_dir="$target_dir/$name"
   local skill_file="$skill_dir/SKILL.md"
+  local content
+
+  # Built with printf rather than a heredoc inside $(...): bash 3.2, which is
+  # /bin/bash on macOS, mis-parses heredocs in command substitutions.
+  content="$(printf -- '---\nname: %s\ndescription: "%s"\n' "$name" "$description")"
+  if [[ -n "$allowed_tools" ]]; then
+    content="$content"$'\n'"$(printf 'allowed-tools: "%s"' "$allowed_tools")"
+  fi
+  content="$content"$'\n'"---"$'\n\n'"Read and follow \`.context/playbooks/$rel_path\` in full."
+
+  # Same rule as copy_file: an unchanged wrapper needs no prompt.
+  if [[ -f "$skill_file" ]] && [[ "$(cat "$skill_file")" == "$content" ]]; then
+    return
+  fi
 
   if ! confirm_overwrite "$skill_file"; then
     return
   fi
 
   mkdir -p "$skill_dir"
+  printf '%s\n' "$content" > "$skill_file"
+}
 
-  if [[ -n "$allowed_tools" ]]; then
-    cat > "$skill_file" << SKILL_EOF
----
-name: $name
-description: "$description"
-allowed-tools: "$allowed_tools"
----
-
-Read and follow \`.context/playbooks/$rel_path\` in full.
-SKILL_EOF
-  else
-    cat > "$skill_file" << SKILL_EOF
----
-name: $name
-description: "$description"
----
-
-Read and follow \`.context/playbooks/$rel_path\` in full.
-SKILL_EOF
-  fi
+# Remove generated wrappers whose playbook the library no longer ships.
+#
+# A wrapper is only a pointer, so once its playbook is renamed or removed it
+# advertises a skill that cannot load. Only files that are exactly what
+# generate_skill writes - at most seven lines, ending in the "Read and follow"
+# pointer - are touched; anything a consumer wrote themselves is left alone.
+prune_stale_skills() {
+  local dir="$1" f target
+  [[ -d "$dir" ]] || return 0
+  for f in "$dir"/*/SKILL.md; do
+    [[ -f "$f" ]] || continue
+    [[ "$(wc -l < "$f" | tr -d ' ')" -le 7 ]] || continue
+    target="$(sed -n 's/^Read and follow `\.context\/playbooks\/\(.*\)` in full\.$/\1/p' "$f" | head -1)"
+    [[ -n "$target" ]] || continue
+    [[ -f "$TARGET/.context/playbooks/$target" ]] && continue
+    rm -f "$f"
+    rmdir "$(dirname "$f")" 2>/dev/null || true
+    echo "    Removed stale skill wrapper $(basename "$(dirname "$f")") (playbook $target no longer ships)"
+  done
 }
 
 generate_skills_for_selected_agents() {
@@ -714,6 +735,24 @@ echo "Deploying agent-contexts to $TARGET"
 echo "  Version: $DEPLOY_VERSION"
 echo "  Selected agents: $(join_by ', ' "${ENABLED_AGENTS[@]}")"
 
+# A deployment made before versioning has a .context/ but no manifest. Copying
+# over it would stamp a manifest claiming the new version onto whatever base
+# files the overwrite guard skipped, leave AGENTS.md without a managed block,
+# and make migrate refuse to run afterwards because a manifest now exists.
+# Upgrade it first: migrate preserves every local edit as an override, and
+# refuses to run on a dirty git tree so the result is reviewable as a diff.
+if [[ -d "$TARGET/.context" && ! -f "$TARGET/.context/manifest.json" ]] &&
+   [[ -f "$TARGET/.context/index.md" || -d "$TARGET/.context/standards" || -d "$TARGET/.context/playbooks" ]]; then
+  echo "  Existing deployment from before versioning detected — upgrading it first."
+  echo ""
+  if ! "$SCRIPT_DIR/migrate.sh" --apply "$TARGET"; then
+    echo "" >&2
+    echo "Error: could not upgrade the existing deployment; nothing else was changed." >&2
+    exit 1
+  fi
+  echo ""
+fi
+
 echo "  Copying shared context files..."
 deploy_agents_md "$SOURCE_ROOT/core/AGENTS.md" "$TARGET/AGENTS.md" "$DEPLOY_VERSION"
 # The override subtree is deliberately excluded here and seeded later with
@@ -810,6 +849,9 @@ if agent_enabled claude || agent_enabled copilot; then
         "Read, Grep, Glob, Bash, Write, Edit, Agent"
     done
   fi
+
+  if agent_enabled claude; then prune_stale_skills "$TARGET/.claude/skills"; fi
+  if agent_enabled copilot; then prune_stale_skills "$TARGET/.github/skills"; fi
 else
   echo "  Skipping skill wrapper generation (no selected agent uses skills)."
 fi

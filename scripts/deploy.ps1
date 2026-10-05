@@ -181,6 +181,26 @@ function Test-IsUtf8Compatible {
 function Copy-SingleFile {
     [CmdletBinding()]
     param([string]$Source, [string]$Destination)
+    $ext = [System.IO.Path]::GetExtension($Source).ToLowerInvariant()
+    $isText = ($ext -in $script:TextExtensions) -and (Test-IsUtf8Compatible -Path $Source)
+    $content = $null
+    if ($isText) {
+        # ANSI/Windows-1252 files without a BOM are indistinguishable from UTF-8 at the header level and will pass
+        # Test-IsUtf8Compatible; characters above U+007F may be silently replaced. All repo source files are UTF-8.
+        $content = [System.IO.File]::ReadAllText($Source, [System.Text.Encoding]::UTF8) -replace "`r`n", "`n" -replace "`r", "`n"
+    }
+    # Identical content needs no decision. Without this, redeploying the same
+    # version prompts once for every file in the library, and a non-interactive
+    # redeploy lists them all as "skipped" when nothing would have changed.
+    if (Test-Path -LiteralPath $Destination -PathType Leaf) {
+        $destFull = [System.IO.Path]::GetFullPath($Destination)
+        if ($isText) {
+            $existing = [System.IO.File]::ReadAllText($destFull, [System.Text.Encoding]::UTF8) -replace "`r`n", "`n"
+            if ($existing -ceq $content) { return }
+        } elseif ((Get-FileHash -LiteralPath $Source -Algorithm SHA256).Hash -eq (Get-FileHash -LiteralPath $destFull -Algorithm SHA256).Hash) {
+            return
+        }
+    }
     if (-not (Confirm-Overwrite -Destination $Destination)) {
         return
     }
@@ -188,11 +208,7 @@ function Copy-SingleFile {
     if (-not (Test-Path $parentDir)) {
         New-Item -ItemType Directory -Path $parentDir -Force | Out-Null
     }
-    $ext = [System.IO.Path]::GetExtension($Source).ToLowerInvariant()
-    if (($ext -in $script:TextExtensions) -and (Test-IsUtf8Compatible -Path $Source)) {
-        # ANSI/Windows-1252 files without a BOM are indistinguishable from UTF-8 at the header level and will pass
-        # Test-IsUtf8Compatible; characters above U+007F may be silently replaced. All repo source files are UTF-8.
-        $content = [System.IO.File]::ReadAllText($Source, [System.Text.Encoding]::UTF8) -replace "`r`n", "`n" -replace "`r", "`n"
+    if ($isText) {
         [System.IO.File]::WriteAllText($Destination, $content, (New-Object System.Text.UTF8Encoding($false)))
     } else {
         Copy-Item -Path $Source -Destination $Destination -Force
@@ -479,7 +495,9 @@ function New-SkillWrapper {
     $name = ""
     $description = ""
 
-    foreach ($line in (Get-Content $PlaybookPath)) {
+    # Explicit UTF-8: Windows PowerShell 5.1 would otherwise decode the playbook
+    # as ANSI and write a mangled description into every wrapper.
+    foreach ($line in [System.IO.File]::ReadAllLines([System.IO.Path]::GetFullPath($PlaybookPath), [System.Text.Encoding]::UTF8)) {
         if ($line -match '^name:\s*(.+)$') {
             if (-not $name) { $name = $Matches[1].Trim() }
         }
@@ -494,12 +512,6 @@ function New-SkillWrapper {
     $skillDir = Join-Path $TargetDir $name
     $skillFile = Join-Path $skillDir "SKILL.md"
 
-    if (-not (Confirm-Overwrite -Destination $skillFile)) {
-        return
-    }
-
-    New-Item -ItemType Directory -Path $skillDir -Force | Out-Null
-
     $bt = '`'
     $lines = @("---", "name: $name", "description: `"$description`"")
     if ($AllowedTools) {
@@ -508,7 +520,46 @@ function New-SkillWrapper {
     $lines += @("---", "", "Read and follow ${bt}.context/playbooks/${RelPath}${bt} in full.")
 
     $content = ($lines -join "`n") + "`n"
+
+    # Same rule as Copy-SingleFile: an unchanged wrapper needs no prompt.
+    if (Test-Path -LiteralPath $skillFile -PathType Leaf) {
+        $existing = [System.IO.File]::ReadAllText([System.IO.Path]::GetFullPath($skillFile), [System.Text.Encoding]::UTF8) -replace "`r`n", "`n"
+        if ($existing -ceq $content) { return }
+    }
+
+    if (-not (Confirm-Overwrite -Destination $skillFile)) {
+        return
+    }
+
+    New-Item -ItemType Directory -Path $skillDir -Force | Out-Null
+
     [System.IO.File]::WriteAllText($skillFile, $content, (New-Object System.Text.UTF8Encoding($false)))
+}
+
+# Remove generated wrappers whose playbook the library no longer ships.
+#
+# A wrapper is only a pointer, so once its playbook is renamed or removed it
+# advertises a skill that cannot load. Only files that are exactly what
+# New-SkillWrapper writes - at most seven lines, ending in the "Read and follow"
+# pointer - are touched; anything a consumer wrote themselves is left alone.
+# Mirrors prune_stale_skills in deploy.sh.
+function Remove-StaleSkillWrappers {
+    param([string]$SkillsDir)
+    if (-not (Test-Path -LiteralPath $SkillsDir)) { return }
+    foreach ($dir in (Get-ChildItem -LiteralPath $SkillsDir -Directory -ErrorAction SilentlyContinue)) {
+        $skillFile = Join-Path $dir.FullName 'SKILL.md'
+        if (-not (Test-Path -LiteralPath $skillFile -PathType Leaf)) { continue }
+        $lines = [System.IO.File]::ReadAllLines($skillFile, [System.Text.Encoding]::UTF8)
+        if ($lines.Count -gt 7) { continue }
+        $target = $null
+        foreach ($line in $lines) {
+            if ($line -match '^Read and follow `\.context/playbooks/(.+)` in full\.$') { $target = $Matches[1] }
+        }
+        if (-not $target) { continue }
+        if (Test-Path -LiteralPath (Join-Path $script:Target ".context/playbooks/$target")) { continue }
+        Remove-Item -LiteralPath $dir.FullName -Recurse -Force
+        Write-Host "    Removed stale skill wrapper $($dir.Name) (playbook $target no longer ships)"
+    }
 }
 
 function New-SkillsForSelectedAgents {
@@ -605,13 +656,44 @@ $SourceRoot = Split-Path -Parent $PSScriptRoot
 $DeployVersion = '0.0.0'
 $versionFile = Join-Path $SourceRoot 'VERSION'
 if (Test-Path -LiteralPath $versionFile) {
-    $candidate = ConvertTo-AcSemVer ((Get-Content -LiteralPath $versionFile -Raw))
+    $candidate = ConvertTo-AcSemVer ((Read-AcTextLines -Path $versionFile) -join '')
     if (Test-AcSemVer $candidate) { $DeployVersion = $candidate }
 }
 
 Write-Host "Deploying agent-contexts to $($script:Target)"
 Write-Host "  Version: $DeployVersion"
 Write-Host "  Selected agents: $($script:EnabledAgents -join ', ')"
+
+# A deployment made before versioning has a .context/ but no manifest. Copying
+# over it would stamp a manifest claiming the new version onto whatever base
+# files the overwrite guard skipped, leave AGENTS.md without a managed block,
+# and make migrate refuse to run afterwards because a manifest now exists.
+# Upgrade it first: migrate preserves every local edit as an override, and
+# refuses to run on a dirty git tree so the result is reviewable as a diff.
+# Mirrors the same step in deploy.sh.
+$legacyContext = Join-Path $script:Target '.context'
+if ((Test-Path -LiteralPath $legacyContext) -and
+    -not (Test-Path -LiteralPath (Join-Path $legacyContext 'manifest.json')) -and
+    ((Test-Path -LiteralPath (Join-Path $legacyContext 'index.md')) -or
+     (Test-Path -LiteralPath (Join-Path $legacyContext 'standards')) -or
+     (Test-Path -LiteralPath (Join-Path $legacyContext 'playbooks')))) {
+    Write-Host "  Existing deployment from before versioning detected - upgrading it first."
+    Write-Host ""
+    $global:LASTEXITCODE = 0
+    $migrated = $true
+    try {
+        & (Join-Path $PSScriptRoot 'migrate.ps1') -Target $script:Target -Apply
+    } catch {
+        Write-Host $_.Exception.Message -ForegroundColor Red
+        $migrated = $false
+    }
+    if (-not $migrated -or $LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath (Join-Path $legacyContext 'manifest.json'))) {
+        Write-Host ""
+        Write-Host "Error: could not upgrade the existing deployment; nothing else was changed." -ForegroundColor Red
+        exit 1
+    }
+    Write-Host ""
+}
 
 Write-Host "  Copying shared context files..."
 
@@ -624,14 +706,14 @@ if (-not (Test-Path -LiteralPath $agentsDst)) {
     if (-not (Test-Path -LiteralPath $parent)) {
         New-Item -ItemType Directory -Path $parent -Force | Out-Null
     }
-    $seeded = Get-Content -LiteralPath $agentsSrc | ForEach-Object {
+    $seeded = Read-AcTextLines -Path $agentsSrc | ForEach-Object {
         if ($_.StartsWith('<!-- agentic-context:begin')) {
             "<!-- agentic-context:begin $DeployVersion -->"
         } else {
             $_
         }
     }
-    Set-Content -LiteralPath $agentsDst -Value $seeded -Encoding UTF8
+    Write-AcTextFile -Path $agentsDst -Lines $seeded
 } elseif (Test-AcManagedBlock -Path $agentsDst) {
     Update-AcManagedBlock -Source $agentsSrc -Destination $agentsDst -Version $DeployVersion
     Write-Host "    AGENTS.md: refreshed managed block (your content preserved)"
@@ -711,6 +793,9 @@ if ((Test-AgentEnabled 'claude') -or (Test-AgentEnabled 'copilot')) {
             }
         }
     }
+
+    if (Test-AgentEnabled 'claude') { Remove-StaleSkillWrappers -SkillsDir (Join-Path $script:Target '.claude/skills') }
+    if (Test-AgentEnabled 'copilot') { Remove-StaleSkillWrappers -SkillsDir (Join-Path $script:Target '.github/skills') }
 } else {
     Write-Host "  Skipping skill wrapper generation (no selected agent uses skills)."
 }
@@ -750,7 +835,7 @@ foreach ($libFile in @('common.sh', 'common.ps1')) {
     }
 }
 
-Set-Content -LiteralPath (Join-Path $script:Target '.context/VERSION') -Value $DeployVersion -Encoding UTF8
+Write-AcTextFile -Path (Join-Path $script:Target '.context/VERSION') -Lines @($DeployVersion)
 
 Write-Host "  Writing manifest -> $(Join-Path $script:Target '.context/manifest.json')"
 # pin and checkFrequency are consumer configuration, not derived state.
@@ -763,7 +848,7 @@ $existingPin = ''
 $existingFreq = 'weekly'
 if (Test-Path -LiteralPath $manifestPath) {
     try {
-        $existing = Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json
+        $existing = Get-AcManifest -Path $manifestPath
         if ($existing.pin) { $existingPin = [string]$existing.pin }
         if ($existing.checkFrequency) { $existingFreq = [string]$existing.checkFrequency }
     } catch {
